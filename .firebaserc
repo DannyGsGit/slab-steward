@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "gen-lang-client-0486805387"
+  },
+  "targets": {
+    "gen-lang-client-0486805387": {
+      "hosting": {
+        "slab-steward": [
+          "slab-steward"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

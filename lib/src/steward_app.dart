@@ -1,0 +1,139 @@
+import 'package:flutter/material.dart';
+
+import 'map/steward_map_view.dart';
+import 'state/steward_state.dart';
+import 'ui/legend.dart';
+import 'ui/map_controls.dart';
+import 'ui/selection_panel.dart';
+import 'ui/staged_changes.dart';
+import 'ui/trail_list_panel.dart';
+import 'ui/trail_panel.dart';
+
+class StewardApp extends StatefulWidget {
+  const StewardApp({super.key});
+
+  @override
+  State<StewardApp> createState() => _StewardAppState();
+}
+
+class _StewardAppState extends State<StewardApp> {
+  final _state = StewardState();
+
+  @override
+  void dispose() {
+    _state.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'SLAB Steward',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          // The OpenTrailMap trail brown, so the chrome and the map agree.
+          seedColor: const Color(0xFF4F2E28),
+        ),
+        // Near-white rather than the seed's tint: these cards sit on top of the
+        // map, and a coloured panel competes with the trail colours that
+        // actually carry meaning.
+        cardTheme: const CardThemeData(
+          elevation: 3,
+          color: Color(0xFFFDFBF8),
+          surfaceTintColor: Colors.transparent,
+        ),
+      ),
+      home: _HomePage(state: _state),
+    );
+  }
+}
+
+class _HomePage extends StatelessWidget {
+  const _HomePage({required this.state});
+
+  final StewardState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(child: StewardMapView(state: state)),
+          // Everything above the map reacts to the same state object.
+          Positioned.fill(
+            child: ListenableBuilder(
+              listenable: state,
+              builder: (context, _) => _MapOverlays(state: state),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MapOverlays extends StatelessWidget {
+  const _MapOverlays({required this.state});
+
+  final StewardState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      // The map underneath still needs to receive pans and clicks.
+      child: Stack(
+        children: [
+          Positioned(
+            top: 16,
+            left: 16,
+            bottom: 16,
+            // The staged-changes indicator and the trail list live under the
+            // controls rather than opposite them: the right edge belongs to
+            // the editor, and both of these have to stay visible while a trail
+            // is selected.
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                MapControls(state: state),
+                const SizedBox(height: 12),
+                TrailListButton(state: state),
+                if (state.hasStagedEdits) ...[
+                  const SizedBox(height: 12),
+                  StagedChangesButton(state: state),
+                ],
+                if (state.isTrailListOpen) ...[
+                  const SizedBox(height: 12),
+                  Flexible(child: TrailListPanel(state: state)),
+                ],
+              ],
+            ),
+          ),
+          // The legend and the list both want the bottom-left corner, and the
+          // list is the one someone is actively reading.
+          if (!state.isTrailListOpen)
+            Positioned(
+              bottom: 16,
+              left: 16,
+              child: Legend(state: state),
+            ),
+          if (state.hasSelection)
+            Positioned(
+              top: 16,
+              right: 16,
+              bottom: 16,
+              child: Align(
+                alignment: Alignment.topRight,
+                // One trail gets the detail view; several get the bulk editor,
+                // which applies one value across all of them.
+                child: state.hasMultiSelection
+                    ? SelectionPanel(state: state)
+                    : TrailPanel(state: state),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
