@@ -148,13 +148,7 @@ uploads**. Before the first one:
 - [ ] `osmEnvironment` flipped to `OsmEnvironment.live`
 - [ ] The dry run exercised end to end at `slab-steward.web.app`, since that
       leaves only the upload itself untested
-- [ ] `Organised Editing/Activities/SLAB Steward` wiki page live
-- [ ] Two-week community notice posted — forum, OSM US Slack `#trails`,
-      regional channel
 
-The last two are obligations, not suggestions:
-[docs/slab-steward-osm-changeset-spec.md](docs/slab-steward-osm-changeset-spec.md)
-§9-10.
 
 ### Other commands
 
