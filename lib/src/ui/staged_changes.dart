@@ -10,163 +10,54 @@ import '../state/steward_state.dart';
 import 'slab_chrome.dart';
 import 'slab_theme.dart';
 
-/// The map-level indicator that edits are waiting to be submitted.
-///
-/// Carries a count badge — the pending work has to be visible from the map,
-/// because that's where the rider is while they build a changeset up one trail
-/// at a time. Renders nothing when there is nothing staged.
-class StagedChangesButton extends StatelessWidget {
-  const StagedChangesButton({super.key, required this.state});
-
-  final StewardState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final count = state.stagedEditCount;
-    if (count == 0) return const SizedBox.shrink();
-
-    // The panel's own ink, like every other card on the map — a gold-washed
-    // card sits so close to the gold text on it that the whole button
-    // disappears. The gold stays on the glyph and the label, where it reads.
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => showStagedChangesDialog(context, state),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 16, 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Badge.count(
-                count: count,
-                child: const Padding(
-                  padding: EdgeInsets.only(right: 2, top: 2),
-                  child: Icon(
-                    Icons.edit_note,
-                    size: 22,
-                    color: SlabColors.gold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Review ${_countLabel(count)}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: SlabColors.gold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 String _countLabel(int count) => count == 1 ? '1 change' : '$count changes';
 
-Future<void> showStagedChangesDialog(BuildContext context, StewardState state) {
-  return showDialog<void>(
-    context: context,
-    builder: (_) => StagedChangesDialog(state: state),
-  );
-}
-
-/// Review, prune, and submit the staged edits.
+/// Review, prune, and submit the staged edits — the sidebar's Staged changes
+/// pane.
 ///
 /// The changeset comment is mandatory here for the same reason OSM asks for
-/// one: an unexplained edit is the kind other mappers revert. Clicking
-/// submit doesn't write to OSM directly — it hands off to a compliance gate
-/// that checks the comment, appends the campaign hashtag if it's missing,
-/// re-reads every staged trail, and checks for edits made since staging
-/// before anything is finalized. See docs/slab-steward-osm-changeset-spec.md.
-class StagedChangesDialog extends StatefulWidget {
-  const StagedChangesDialog({super.key, required this.state});
+/// one: an unexplained edit is the kind other mappers revert. Submitting
+/// doesn't write to OSM from this pane — it hands off to [SubmissionGateDialog],
+/// a compliance gate that checks the comment, appends the campaign hashtag if
+/// it's missing, re-reads every staged trail, and checks for edits made since
+/// staging before anything is finalized. See
+/// docs/specs/slab-steward-osm-changeset-spec.md.
+class StagedChangesPanel extends StatefulWidget {
+  const StagedChangesPanel({super.key, required this.state});
 
   final StewardState state;
 
   @override
-  State<StagedChangesDialog> createState() => _StagedChangesDialogState();
+  State<StagedChangesPanel> createState() => _StagedChangesPanelState();
 }
 
-enum _Step { review, gate }
-
-class _StagedChangesDialogState extends State<StagedChangesDialog> {
+class _StagedChangesPanelState extends State<StagedChangesPanel> {
   final _comment = TextEditingController();
   bool _requestReview = false;
-  _Step _step = _Step.review;
-  SubmissionGate? _gate;
-
-  /// Set once a passed gate has actually submitted, so the checklist can
-  /// report success and wait for the rider to close it rather than closing
-  /// out from under them.
-  int? _finalizedCount;
 
   /// An error from the most recent sign-in attempt, shown next to the
   /// sign-in button. Cleared on the next attempt.
   String? _authError;
 
-  /// Conflicts the rider has already acted on this run, tracked by identity
-  /// so the list can shrink live without waiting on a re-check.
-  final Set<FieldConflict> _dismissedConflicts = {};
-  final Set<int> _dismissedUnreadable = {};
-
   @override
   void dispose() {
     _comment.dispose();
-    _gate?.dispose();
     super.dispose();
   }
 
-  Future<void> _runGate() async {
+  /// The point of no return lives behind this: the gate dialog runs the
+  /// checks and, if they all pass, submits.
+  Future<void> _submit() async {
     final comment = _comment.text.trim();
     if (comment.isEmpty) return;
-    _dismissedConflicts.clear();
-    _dismissedUnreadable.clear();
-    final gate = _gate ??= widget.state.createSubmissionGate();
-    setState(() => _step = _Step.gate);
-
-    final passed = await gate.run(
-      comment: comment,
-      trails: widget.state.stagedTrails,
+    await showDialog<void>(
+      context: context,
+      builder: (_) => SubmissionGateDialog(
+        state: widget.state,
+        comment: comment,
+        requestReview: _requestReview,
+      ),
     );
-    if (!mounted) return;
-    if (passed) await _submit(gate);
-  }
-
-  /// The point of no return: on a `live` build this writes to OpenStreetMap,
-  /// and a closed changeset can't be un-submitted. Only reachable once [gate]
-  /// has passed every pre-flight check and the rider is signed in, which the
-  /// review step's Submit button already enforces.
-  ///
-  /// Nothing here branches on the configuration — a dry run reports success
-  /// the same way, and this folds the result into the override cache and
-  /// empties staging just as it would after a real write.
-  Future<void> _submit(SubmissionGate gate) async {
-    final token = widget.state.auth.bearerToken;
-    if (token == null) return;
-    final count = widget.state.stagedEditCount;
-    final ok = await gate.submit(
-      bearerToken: token,
-      requestReview: _requestReview,
-    );
-    if (!mounted) return;
-    if (ok) {
-      // Folds what just went out into the override cache before emptying the
-      // staging area, so the trail keeps rendering as edited instead of
-      // reverting to whatever the tileset last knew.
-      widget.state.applySubmitted();
-      // Stays open on purpose — the rider closes it once they've read the
-      // result, rather than it vanishing the moment the last check passes.
-      setState(() => _finalizedCount = count);
-    } else {
-      // A rejected token can't be retried as-is; drop it so the review step
-      // offers sign-in again rather than a Submit button that can't work.
-      if (gate.tokenRejected) widget.state.auth.clearOnUnauthorized();
-      setState(() {}); // the failure itself is already on gate.checks
-    }
   }
 
   Future<void> _signIn() async {
@@ -181,12 +72,191 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
     }
   }
 
-  void _backToReview() {
-    setState(() => _step = _Step.review);
+  Future<void> _discardAll() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => PointerInterceptor(
+        child: AlertDialog(
+          title: const Text('Discard all staged changes?'),
+          content: Text(
+            '${_countLabel(widget.state.stagedEditCount)} will be thrown '
+            'away. Nothing has been submitted, so nothing on OpenStreetMap '
+            'changes.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Keep them'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: SlabColors.rust,
+                foregroundColor: SlabColors.cream,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Discard all'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed ?? false) widget.state.clearStagedEdits();
   }
 
-  void _keepMine(SubmissionGate gate, FieldConflict conflict) {
-    final live = gate.freshWays[conflict.osmWayId];
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final byTrail = widget.state.stagedEditsByTrail;
+
+    if (byTrail.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Text('Nothing staged. Pick a trail and edit an attribute.'),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SubmitSection(
+          comment: _comment,
+          requestReview: _requestReview,
+          onRequestReviewChanged: (value) =>
+              setState(() => _requestReview = value),
+          onSubmit: _submit,
+          onSignIn: _signIn,
+          authError: _authError,
+          state: widget.state,
+        ),
+        const Divider(height: 1),
+        Flexible(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
+            children: [
+              for (final entry in byTrail.entries)
+                _TrailGroup(
+                  osmWayId: entry.key,
+                  edits: entry.value,
+                  state: widget.state,
+                ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+              label: const Text('Discard all'),
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.error,
+              ),
+              onPressed: _discardAll,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The pre-flight checks, and — if they all pass — the submission itself.
+///
+/// A dialog rather than a pane: this is the one moment in Steward that is not
+/// reversible, and it deserves the whole window's attention rather than a
+/// column beside a map the rider could keep panning.
+class SubmissionGateDialog extends StatefulWidget {
+  const SubmissionGateDialog({
+    super.key,
+    required this.state,
+    required this.comment,
+    required this.requestReview,
+  });
+
+  final StewardState state;
+
+  /// Already trimmed and non-empty — the pane's Submit button enforces that.
+  final String comment;
+  final bool requestReview;
+
+  @override
+  State<SubmissionGateDialog> createState() => _SubmissionGateDialogState();
+}
+
+class _SubmissionGateDialogState extends State<SubmissionGateDialog> {
+  late final SubmissionGate _gate = widget.state.createSubmissionGate();
+
+  /// Set once a passed gate has actually submitted, so the checklist can
+  /// report success and wait for the rider to close it rather than closing
+  /// out from under them.
+  int? _finalizedCount;
+
+  /// Conflicts the rider has already acted on this run, tracked by identity
+  /// so the list can shrink live without waiting on a re-check.
+  final Set<FieldConflict> _dismissedConflicts = {};
+  final Set<int> _dismissedUnreadable = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _runGate();
+  }
+
+  @override
+  void dispose() {
+    _gate.dispose();
+    super.dispose();
+  }
+
+  Future<void> _runGate() async {
+    _dismissedConflicts.clear();
+    _dismissedUnreadable.clear();
+    final passed = await _gate.run(
+      comment: widget.comment,
+      trails: widget.state.stagedTrails,
+    );
+    if (!mounted) return;
+    if (passed) await _submit();
+  }
+
+  /// The point of no return: on a `live` build this writes to OpenStreetMap,
+  /// and a closed changeset can't be un-submitted. Only reachable once the
+  /// gate has passed every pre-flight check and the rider is signed in, which
+  /// the pane's Submit button already enforces.
+  ///
+  /// Nothing here branches on the configuration — a dry run reports success
+  /// the same way, and this folds the result into the override cache and
+  /// empties staging just as it would after a real write.
+  Future<void> _submit() async {
+    final token = widget.state.auth.bearerToken;
+    if (token == null) return;
+    final count = widget.state.stagedEditCount;
+    final ok = await _gate.submit(
+      bearerToken: token,
+      requestReview: widget.requestReview,
+    );
+    if (!mounted) return;
+    if (ok) {
+      // Folds what just went out into the override cache before emptying the
+      // staging area, so the trail keeps rendering as edited instead of
+      // reverting to whatever the tileset last knew.
+      widget.state.applySubmitted();
+      // Stays open on purpose — the rider closes it once they've read the
+      // result, rather than it vanishing the moment the last check passes.
+      setState(() => _finalizedCount = count);
+    } else {
+      // A rejected token can't be retried as-is; drop it so the pane offers
+      // sign-in again rather than a Submit button that can't work.
+      if (_gate.tokenRejected) widget.state.auth.clearOnUnauthorized();
+      setState(() {}); // the failure itself is already on gate.checks
+    }
+  }
+
+  void _keepMine(FieldConflict conflict) {
+    final live = _gate.freshWays[conflict.osmWayId];
     if (live == null) return;
     widget.state.rebaseEditOnLive(conflict.osmWayId, conflict.attribute, live);
     setState(() => _dismissedConflicts.add(conflict));
@@ -202,125 +272,28 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
     setState(() => _dismissedUnreadable.add(trail.osmWayId));
   }
 
-  Future<void> _discardAll() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Discard all staged changes?'),
-        content: Text(
-          '${_countLabel(widget.state.stagedEditCount)} will be thrown away. '
-          'Nothing has been submitted, so nothing on OpenStreetMap changes.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep them'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: SlabColors.rust,
-              foregroundColor: SlabColors.cream,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Discard all'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed ?? false) widget.state.clearStagedEdits();
-  }
-
   @override
   Widget build(BuildContext context) {
     // On web the map underneath is a platform view, and the browser delivers
     // scrolls and clicks to it directly regardless of what Flutter paints on
     // top — see the matching note in StewardMapView. PointerInterceptor stops
     // them at the DOM before they reach it.
-    final gate = _gate;
     return PointerInterceptor(
       child: Dialog(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 540, maxHeight: 680),
           child: ListenableBuilder(
-            listenable: gate == null
-                ? widget.state
-                : Listenable.merge([widget.state, gate]),
-            builder: (context, _) => _step == _Step.review
-                ? _buildReviewStep(context)
-                : _buildGateStep(context, gate!),
+            listenable: Listenable.merge([widget.state, _gate]),
+            builder: (context, _) => _buildGateStep(context),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildReviewStep(BuildContext context) {
+  Widget _buildGateStep(BuildContext context) {
     final theme = Theme.of(context);
-    final byTrail = widget.state.stagedEditsByTrail;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        PanelHeader(
-          title: 'Staged changes',
-          large: true,
-          closeTooltip: 'Close',
-          onClose: () => Navigator.of(context).pop(),
-        ),
-        if (byTrail.isEmpty)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(24, 8, 24, 24),
-            child: Text('Nothing staged. Pick a trail and edit an attribute.'),
-          )
-        else ...[
-          _SubmitSection(
-            comment: _comment,
-            requestReview: _requestReview,
-            onRequestReviewChanged: (value) =>
-                setState(() => _requestReview = value),
-            onSubmit: _runGate,
-            onSignIn: _signIn,
-            authError: _authError,
-            state: widget.state,
-          ),
-          const Divider(height: 1),
-          Flexible(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(24, 8, 12, 8),
-              shrinkWrap: true,
-              children: [
-                for (final entry in byTrail.entries)
-                  _TrailGroup(
-                    osmWayId: entry.key,
-                    edits: entry.value,
-                    state: widget.state,
-                  ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                icon: const Icon(Icons.delete_sweep_outlined, size: 18),
-                label: const Text('Discard all'),
-                style: TextButton.styleFrom(
-                  foregroundColor: theme.colorScheme.error,
-                ),
-                onPressed: _discardAll,
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildGateStep(BuildContext context, SubmissionGate gate) {
-    final theme = Theme.of(context);
+    final gate = _gate;
     final remainingConflicts = [
       for (final c in gate.conflicts)
         if (!_dismissedConflicts.contains(c)) c,
@@ -398,7 +371,7 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
                   CheckStatus.failed) ...[
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: _backToReview,
+                  onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Edit comment'),
                 ),
               ],
@@ -451,7 +424,7 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
                 for (final conflict in remainingConflicts)
                   _ConflictRow(
                     conflict: conflict,
-                    onKeepMine: () => _keepMine(gate, conflict),
+                    onKeepMine: () => _keepMine(conflict),
                     onDiscardMine: () => _discardMine(conflict),
                   ),
               ],
@@ -469,21 +442,20 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
         if (!isRunning)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: _finalizedCount != null
-                ? Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton(
+            child: Align(
+              alignment: _finalizedCount != null
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
+              child: _finalizedCount != null
+                  ? FilledButton(
                       onPressed: () => Navigator.of(context).pop(),
                       child: const Text('Close'),
-                    ),
-                  )
-                : Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: _backToReview,
+                    )
+                  : TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
                       child: const Text('Back'),
                     ),
-                  ),
+            ),
           ),
       ],
     );

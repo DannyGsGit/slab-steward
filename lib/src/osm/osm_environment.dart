@@ -74,6 +74,6 @@ enum OsmEnvironment {
 ///
 /// Flip to [OsmEnvironment.live] only once the Organised Editing Guidelines
 /// wiki page and the two-week community notice are live — see
-/// docs/slab-steward-osm-changeset-spec.md §9-10. Nothing else about the
+/// docs/specs/slab-steward-osm-changeset-spec.md §9-10. Nothing else about the
 /// build changes; the same OAuth app and the same reads serve both.
 const osmEnvironment = OsmEnvironment.dryRun;

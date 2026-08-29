@@ -2,7 +2,7 @@ import 'submission_gate.dart' show ResolvedWrite;
 
 // The XML bodies the changeset write path sends — factored out of OsmApi so
 // there is exactly one place that knows the shape of a changeset-create or
-// osmChange-upload request. See docs/slab-steward-osm-changeset-spec.md §2
+// osmChange-upload request. See docs/specs/slab-steward-osm-changeset-spec.md §2
 // for why every pre-existing tag and every `<nd>` has to be reproduced, not
 // just the ones that changed.
 

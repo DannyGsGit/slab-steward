@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/slab_theme.dart';
+import 'ebike_class.dart';
 
 /// SLAB's e-bike permission picker and its mapping onto OSM
 /// `electric_bicycle=*`.
@@ -23,9 +24,12 @@ import '../ui/slab_theme.dart';
 ///    about e-bikes specifically: "allowed" does not mean the trail allows
 ///    bikes, and "not allowed" can be true on a trail that welcomes them. Each
 ///    option carries a [description] saying so, shown while choosing.
-///  * It covers pedelecs — motor assists while pedalling, cut off around
-///    25 km/h. Faster machines are `speed_pedelec=*`, which Steward does not
-///    write.
+///  * '''Which e-bike is a separate question.''' The bottom rung of a
+///    jurisdiction's ladder — a Class 1, a pedelec, a snorfiets — and the
+///    faster machines above it each ride under a key of their own. Which rung
+///    a rider is answering about is [EbikeJurisdiction]'s job, asked by its
+///    own picker once this one says yes. This enum is only "may they, or may
+///    they not".
 enum EbikeAccess {
   allowed(
     'Allowed',
@@ -48,6 +52,12 @@ enum EbikeAccess {
   /// One line saying what this option actually claims about the trail. Shown
   /// beside the option in the picker, and under the picker once it's chosen:
   /// this key is about e-bikes alone, and a bare "allowed" doesn't say that.
+  ///
+  /// Deliberately says nothing about *which* class. This picker answers one
+  /// question — may they ride, or may they not — and the class is the next
+  /// question, asked by [EbikeJurisdiction]'s own picker and only once the
+  /// answer here is yes. Folding the two together made "Allowed" read as a
+  /// claim about Class 1 before the rider had said anything about classes.
   final String description;
 
   /// The one OSM key this picker reads and writes.
@@ -110,11 +120,7 @@ class EbikeIcon extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Icon(
-            Icons.bolt,
-            size: size,
-            color: color,
-          ),
+          Icon(Icons.bolt, size: size, color: color),
           if (access == EbikeAccess.notAllowed)
             CustomPaint(
               size: Size.square(size),

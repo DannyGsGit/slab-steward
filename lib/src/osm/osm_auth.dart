@@ -13,7 +13,7 @@ import 'pkce.dart';
 /// creation and comments; `write_notes` is requested now — even though
 /// there's no note-leaving feature yet — so that feature won't need a
 /// second consent screen later. See
-/// docs/slab-steward-osm-changeset-spec.md §1 for why each is needed.
+/// docs/specs/slab-steward-osm-changeset-spec.md §1 for why each is needed.
 const _scope = 'read_prefs write_api write_notes';
 
 /// Sign-in state for the rider's own OSM account, via OAuth 2.0

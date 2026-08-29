@@ -4,11 +4,14 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../model/difficulty.dart';
+import '../model/ebike_class.dart';
 import '../model/electric_bicycle.dart';
 import '../model/lens.dart';
+import '../model/sidebar_section.dart';
 import '../model/staged_edit.dart';
 import '../map/otm_conventions.dart' show renderedTagKeys;
 import '../model/trail.dart';
+import '../model/trail_filters.dart';
 import '../model/trail_overrides.dart';
 import '../osm/osm_api.dart';
 import '../osm/osm_auth.dart';
@@ -90,7 +93,12 @@ class StewardState extends ChangeNotifier {
   /// minimum zoom can hold thousands; a list that long is not a list.
   static const maxVisibleTrails = 250;
 
-  TravelMode _mode = TravelMode.mtb;
+  /// Who the map is asking about. Empty is a legal answer — it asks nobody,
+  /// which is the old "all trails".
+  final Set<TravelMode> _modes = {TravelMode.mtb};
+
+  /// The kinds of line the map draws. See [TrailKind].
+  final Set<TrailKind> _kinds = TrailKind.defaults;
 
   /// The lenses the map colours by. Defaults to the attribute lenses — the
   /// "is this trail finished?" question Steward exists to answer.
@@ -116,7 +124,13 @@ class StewardState extends ChangeNotifier {
   /// rider has since dropped — or re-read — lands nowhere.
   final Map<int, int> _fetchTokens = {};
 
-  bool _isTrailListOpen = false;
+  /// The open sidebar pane, or null when the rail is collapsed to the map.
+  SidebarSection? _activeSection = SidebarSection.map;
+
+  /// What was open before a map click took the pane over for the editor, so
+  /// clearing the selection puts the rider back where they were rather than
+  /// collapsing the sidebar out from under them.
+  SidebarSection? _sectionBeforeSelection;
   bool _hasListedVisibleTrails = false;
   bool _visibleTrailsTruncated = false;
   List<int> _visibleWayIds = const [];
@@ -124,7 +138,9 @@ class StewardState extends ChangeNotifier {
   /// Edits waiting to go out as one changeset, in the order they were staged.
   final List<StagedEdit> _stagedEdits = [];
 
-  TravelMode get mode => _mode;
+  Set<TravelMode> get modes => UnmodifiableSetView(_modes);
+
+  Set<TrailKind> get kinds => UnmodifiableSetView(_kinds);
 
   /// The lenses currently applied. A trail passes only when it answers every
   /// one of them; an empty selection colours nothing.
@@ -139,11 +155,39 @@ class StewardState extends ChangeNotifier {
   int get stagedRevision => _stagedRevision;
   int _stagedRevision = 0;
 
-  void setMode(TravelMode mode) {
-    if (_mode == mode) return;
-    _mode = mode;
-    // "Unknown access" asks a question that has no meaning without a mode.
-    if (mode == TravelMode.all) _lenses.remove(Lens.access);
+  /// Adds or removes one travel mode, leaving the rest alone.
+  void setModeEnabled(TravelMode mode, bool enabled) {
+    if (_modes.contains(mode) == enabled) return;
+    if (enabled) {
+      _modes.add(mode);
+    } else {
+      _modes.remove(mode);
+    }
+    // "Unknown access" asks a question that has no meaning with nobody to
+    // ask it about.
+    if (_modes.isEmpty) _lenses.remove(Lens.access);
+    _styleRevision++;
+    notifyListeners();
+  }
+
+  void setModes(Set<TravelMode> modes) {
+    if (setEquals(_modes, modes)) return;
+    _modes
+      ..clear()
+      ..addAll(modes);
+    if (_modes.isEmpty) _lenses.remove(Lens.access);
+    _styleRevision++;
+    notifyListeners();
+  }
+
+  /// Draws, or stops drawing, one kind of line.
+  void setKindEnabled(TrailKind kind, bool enabled) {
+    if (_kinds.contains(kind) == enabled) return;
+    if (enabled) {
+      _kinds.add(kind);
+    } else {
+      _kinds.remove(kind);
+    }
     _styleRevision++;
     notifyListeners();
   }
@@ -212,6 +256,10 @@ class StewardState extends ChangeNotifier {
     _selection
       ..clear()
       ..add(trail.osmWayId);
+    // Clicking a trail is a request to work on it, so the editor comes to the
+    // front — the sidebar is where the panel that used to float over the map
+    // now lives.
+    _showSelectionPane();
     notifyListeners();
 
     await ensureAuthoritative(trail.osmWayId);
@@ -222,7 +270,12 @@ class StewardState extends ChangeNotifier {
   Future<void> toggleFromTile(Map<String, Object?> tileProperties) async {
     final trail = _rememberTile(tileProperties);
     if (trail == null) return;
-    await setSelected(trail.osmWayId, !_selection.contains(trail.osmWayId));
+    final add = !_selection.contains(trail.osmWayId);
+    // Adding from the map is the same act of intent a plain click is, so it
+    // brings the editor forward. Ticking a row in the in-view list is not —
+    // that would pull the list out from under the rider mid-sweep.
+    if (add) _showSelectionPane();
+    await setSelected(trail.osmWayId, add);
   }
 
   /// Adds or removes one known trail.
@@ -262,7 +315,9 @@ class StewardState extends ChangeNotifier {
       if (trail == null) continue;
       added |= _selection.add(trail.osmWayId);
     }
-    if (added) notifyListeners();
+    if (!added) return;
+    _showSelectionPane();
+    notifyListeners();
   }
 
   /// Replaces the working set wholesale — "select all", "select none".
@@ -288,6 +343,12 @@ class StewardState extends ChangeNotifier {
     if (_selection.isEmpty) return;
     _abandonReadsOutside(const {});
     _selection.clear();
+    // The editor pane has nothing left to edit, so the rider goes back to
+    // whatever they were doing before they clicked a trail.
+    if (_activeSection == SidebarSection.selection) {
+      _activeSection = _sectionBeforeSelection;
+      _sectionBeforeSelection = null;
+    }
     notifyListeners();
   }
 
@@ -389,9 +450,57 @@ class StewardState extends ChangeNotifier {
     }
   }
 
-  // --- The in-view trail list ----------------------------------------------
+  // --- The sidebar ---------------------------------------------------------
 
-  bool get isTrailListOpen => _isTrailListOpen;
+  /// The pane the sidebar is showing, or null when it is collapsed and the
+  /// map has the whole window.
+  SidebarSection? get activeSection => _activeSection;
+
+  /// Whether the in-view list is the pane on screen. The map only reports
+  /// what's in the viewport while something is there to read it.
+  bool get isTrailListOpen => _activeSection == SidebarSection.trails;
+
+  /// Brings the editor forward, remembering what it displaced.
+  void _showSelectionPane() {
+    if (_activeSection == SidebarSection.selection) return;
+    _sectionBeforeSelection = _activeSection;
+    // The in-view list is answered from the viewport; it isn't the pane on
+    // screen any more, so it goes back to being re-read on open.
+    if (_activeSection == SidebarSection.trails) _forgetVisibleTrails();
+    _activeSection = SidebarSection.selection;
+  }
+
+  void openSection(SidebarSection section) {
+    if (_activeSection == section) return;
+    _forgetVisibleTrails();
+    _activeSection = section;
+    // Opening a pane by hand replaces whatever the editor would have gone
+    // back to: that choice is now the rider's current place.
+    _sectionBeforeSelection = null;
+    notifyListeners();
+  }
+
+  void closeSection() {
+    if (_activeSection == null) return;
+    _forgetVisibleTrails();
+    _activeSection = null;
+    notifyListeners();
+  }
+
+  /// What a rail button does: opens its pane, or collapses the sidebar if that
+  /// pane is already the one open.
+  void toggleSection(SidebarSection section) =>
+      _activeSection == section ? closeSection() : openSection(section);
+
+  /// The list is only ever as good as the viewport it was taken from, so it's
+  /// re-queried on open rather than kept warm.
+  void _forgetVisibleTrails() {
+    _hasListedVisibleTrails = false;
+    _visibleWayIds = const [];
+    _visibleTrailsTruncated = false;
+  }
+
+  // --- The in-view trail list ----------------------------------------------
 
   /// True once the map has answered at least once, so an empty list can say
   /// "no trails here" rather than sitting blank while the first query runs.
@@ -405,21 +514,6 @@ class StewardState extends ChangeNotifier {
   List<Trail> get visibleTrails => [
     for (final id in _visibleWayIds) ?_trails[id],
   ];
-
-  void setTrailListOpen(bool open) {
-    if (_isTrailListOpen == open) return;
-    _isTrailListOpen = open;
-    if (!open) {
-      // The list is only ever as good as the viewport it was taken from, so
-      // it's re-queried on open rather than kept warm.
-      _hasListedVisibleTrails = false;
-      _visibleWayIds = const [];
-      _visibleTrailsTruncated = false;
-    }
-    notifyListeners();
-  }
-
-  void toggleTrailList() => setTrailListOpen(!_isTrailListOpen);
 
   /// Takes the map's report of what's on screen. Tile features repeat across
   /// tile boundaries, so this dedupes by way id.
@@ -527,14 +621,21 @@ class StewardState extends ChangeNotifier {
   /// through forty trails would never see it go. So Steward doesn't write it:
   /// those trails come back counted as protected, to be named rather than
   /// silently downgraded.
-  BatchResult applyElectricBicycle(Iterable<Trail> trails, EbikeAccess value) =>
-      _applyAcross(
-        trails,
-        TrailAttribute.electricBicycle,
-        isCurrent: (trail) => trail.electricBicycle == value,
-        isProtected: (trail) => trail.hasUnmappedElectricBicycle,
-        stage: (trail) => StagedEdit.electricBicycle(trail, value),
-      );
+  ///
+  /// [cap] is the class the rider answered about — "up to Class 1" — in the
+  /// vocabulary of wherever they are. Left out, each trail is asked about the
+  /// cap for its own location; see [Trail.ebikeJurisdiction].
+  BatchResult applyElectricBicycle(
+    Iterable<Trail> trails,
+    EbikeAccess value, {
+    EbikeClass? cap,
+  }) => _applyAcross(
+    trails,
+    TrailAttribute.electricBicycle,
+    isCurrent: (trail) => trail.electricBicycle == value,
+    isProtected: (trail) => trail.hasUnmappedElectricBicycle,
+    stage: (trail) => StagedEdit.electricBicycle(trail, value, cap: cap),
+  );
 
   /// The shared body of the per-attribute bulk appliers: every attribute
   /// stages, skips and walks back on the same rules, and one trail is just a
@@ -593,8 +694,14 @@ class StewardState extends ChangeNotifier {
 
   /// Stages an e-bike permission on one trail, the same way [setDifficulty]
   /// stages a rating.
-  Future<BatchResult> setElectricBicycle(int osmWayId, EbikeAccess value) =>
-      _stageOnTrail(osmWayId, (trail) => applyElectricBicycle([trail], value));
+  Future<BatchResult> setElectricBicycle(
+    int osmWayId,
+    EbikeAccess value, {
+    EbikeClass? cap,
+  }) => _stageOnTrail(
+    osmWayId,
+    (trail) => applyElectricBicycle([trail], value, cap: cap),
+  );
 
   /// Resolves one trail and applies [stage] to it.
   ///
@@ -663,7 +770,7 @@ class StewardState extends ChangeNotifier {
   /// A fresh gate for one submit attempt: comment quality, the campaign
   /// hashtag, a live re-read of every staged trail, and a conflict check
   /// against what each edit was staged on. See
-  /// docs/slab-steward-osm-changeset-spec.md §4.
+  /// docs/specs/slab-steward-osm-changeset-spec.md §4.
   SubmissionGate createSubmissionGate() =>
       SubmissionGate(osmApi: _osmApi, environment: environment);
 
@@ -686,7 +793,13 @@ class StewardState extends ChangeNotifier {
       case TrailAttribute.difficulty:
         stageEdit(StagedEdit.difficulty(liveTrail, edit.difficulty!));
       case TrailAttribute.electricBicycle:
-        stageEdit(StagedEdit.electricBicycle(liveTrail, edit.electricBicycle!));
+        stageEdit(
+          StagedEdit.electricBicycle(
+            liveTrail,
+            edit.electricBicycle!,
+            cap: edit.ebikeClass,
+          ),
+        );
     }
   }
 

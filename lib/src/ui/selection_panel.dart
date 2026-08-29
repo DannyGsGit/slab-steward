@@ -4,12 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../model/difficulty.dart';
+import '../model/ebike_class.dart';
 import '../model/electric_bicycle.dart';
 import '../model/staged_edit.dart';
 import '../model/trail.dart';
 import '../state/steward_state.dart';
 import 'fields.dart';
-import 'slab_chrome.dart';
 
 /// The bulk editor: one guided value per attribute, applied across every trail
 /// in the working set.
@@ -18,6 +18,9 @@ import 'slab_chrome.dart';
 /// §4. A batch that needs different values per trail is two batches, not a
 /// spreadsheet. What the batch *does* produce is one staged edit per trail, so
 /// the review list can show, prune and explain each one on its own.
+///
+/// Lives in the sidebar's Selection pane, which supplies the heading and the
+/// close control.
 class SelectionPanel extends StatefulWidget {
   const SelectionPanel({super.key, required this.state});
 
@@ -34,6 +37,10 @@ typedef _Applied = ({String attribute, String value, BatchResult result});
 class _SelectionPanelState extends State<SelectionPanel> {
   Difficulty? _difficulty;
   EbikeAccess? _ebike;
+
+  /// The class cap the rider picked, when they picked one. Null falls back to
+  /// [_jurisdiction]'s own cap, which is what almost every batch uses.
+  EbikeClass? _cap;
 
   /// Non-null while authoritative tags are being read: `(done, total)`.
   (int, int)? _progress;
@@ -59,6 +66,17 @@ class _SelectionPanelState extends State<SelectionPanel> {
   Set<int> get _selectedIds => {
     for (final trail in widget.state.selectedTrails) trail.osmWayId,
   };
+
+  /// The vocabulary the batch is written in: the one every selected trail
+  /// shares, or the neutral one when a selection straddles a border. A batch
+  /// spanning two jurisdictions is answered in the words both agree on rather
+  /// than in whichever trail happened to be clicked first.
+  EbikeJurisdiction get _jurisdiction {
+    final found = <EbikeJurisdiction>{
+      for (final trail in widget.state.selectedTrails) trail.ebikeJurisdiction,
+    };
+    return found.length == 1 ? found.single : EbikeJurisdiction.elsewhere;
+  }
 
   /// Whether there is anything to stage — either picker having a value is
   /// enough, and a batch that sets both fields is still one pass over the
@@ -93,7 +111,15 @@ class _SelectionPanelState extends State<SelectionPanel> {
         (
           attribute: TrailAttribute.electricBicycle.label,
           value: 'set to ${value.label.toLowerCase()}',
-          result: widget.state.applyElectricBicycle(trails, value),
+          result: widget.state.applyElectricBicycle(
+            trails,
+            value,
+            // Every trail in the batch is asked about the same machine, in
+            // the words the batch was composed in.
+            cap: value == EbikeAccess.allowed
+                ? _cap ?? _jurisdiction.cap
+                : null,
+          ),
         ),
     ];
     setState(() {
@@ -110,50 +136,38 @@ class _SelectionPanelState extends State<SelectionPanel> {
     final state = widget.state;
     final trails = state.selectedTrails;
 
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 340, maxHeight: 560),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            PanelHeader(
-              title: '${trails.length} trails selected',
-              closeTooltip: 'Clear selection',
-              onClose: state.clearSelection,
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Text(
-                '$multiSelectModifier-click a trail to add or remove it, or\n'
-                '$multiSelectModifier-drag a box to add every trail it crosses.',
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
-            Flexible(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
-                shrinkWrap: true,
-                children: [
-                  for (final trail in trails)
-                    _SelectedTrailRow(trail: trail, state: state),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            // Scrolls on its own so a short window shrinks the editor rather
-            // than clipping the button off the bottom of it.
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                child: _buildEditor(theme, trails),
-              ),
-            ),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: Text(
+            '$multiSelectModifier-click a trail to add or remove it, or\n'
+            '$multiSelectModifier-drag a box to add every trail it crosses.',
+            style: theme.textTheme.bodySmall,
+          ),
         ),
-      ),
+        Flexible(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
+            shrinkWrap: true,
+            children: [
+              for (final trail in trails)
+                _SelectedTrailRow(trail: trail, state: state),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        // Scrolls on its own so a short window shrinks the editor rather than
+        // clipping the button off the bottom of it.
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            child: _buildEditor(theme, trails),
+          ),
+        ),
+      ],
     );
   }
 
@@ -192,6 +206,22 @@ class _SelectionPanelState extends State<SelectionPanel> {
                   }),
           ),
         ),
+        if (_ebike == EbikeAccess.allowed) ...[
+          const SizedBox(height: 10),
+          Field(
+            label: 'Up to — ${_jurisdiction.label}',
+            child: EbikeClassDropdown(
+              value: _cap ?? _jurisdiction.cap,
+              jurisdiction: _jurisdiction,
+              onChanged: _isApplying
+                  ? null
+                  : (value) => setState(() {
+                      _cap = value;
+                      _report = null;
+                    }),
+            ),
+          ),
+        ],
         if (_ebike case final access?) ...[
           const SizedBox(height: 6),
           Text(access.description, style: theme.textTheme.bodySmall),

@@ -154,8 +154,9 @@ class _StewardMapViewState extends State<StewardMapView> {
     return jsonEncode(
       buildStewardStyle(
         base,
-        mode: widget.state.mode,
+        modes: widget.state.modes,
         lenses: widget.state.lenses,
+        kinds: widget.state.kinds,
         tags: overrides.isEmpty
             ? const TagSource.tiles()
             : TagSource.overriding(overrides.byTileId),
@@ -447,10 +448,7 @@ class _StewardMapViewState extends State<StewardMapView> {
         if (trail.badgePoint case final point?)
           Marker(
             point: Geographic(lon: point[0], lat: point[1]),
-            size: _StagedBadge.sizeFor(
-              trail.difficulty,
-              trail.electricBicycle,
-            ),
+            size: _StagedBadge.sizeFor(trail.difficulty, trail.electricBicycle),
             child: _StagedBadge(trail.difficulty, trail.electricBicycle),
           ),
   ];

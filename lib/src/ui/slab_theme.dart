@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// The SLAB design system, as Steward wears it.
 ///
-/// Source: `docs/SLAB Design System - Mockups v2.html` — the sister app's
+/// Source: `docs/requirements/SLAB Design System - Mockups v2.html` — the sister app's
 /// handoff doc. Its palette is the moody dark-forest / gold identity, and its
 /// rule for a map screen is the one Steward needs: **the map is fixed, the
 /// chrome around it is ours**. Basemap, trail line colours and the

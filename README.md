@@ -3,7 +3,7 @@
 An OSM metadata editor for laypeople — find a trail you know, set its difficulty
 and surface, submit under your own OpenStreetMap account.
 
-Full scope in [docs/product/SLAB_Steward_Product_Description_v1.md](docs/product/SLAB_Steward_Product_Description_v1.md).
+Full scope in [docs/requirements/SLAB_Steward_Product_Description_v1.md](docs/requirements/SLAB_Steward_Product_Description_v1.md).
 
 ## Status
 
@@ -15,28 +15,48 @@ nothing in `lib/` is web-specific.
 What works today:
 
 - Map of OSM trails, styled to OpenTrailMap's conventions (see below)
-- Travel-mode filter (all / mountain biking / hiking), and a multi-select
-  highlight menu of stackable completeness lenses
+- A rail and one pane beside the map, the way SLAB's own web layout works —
+  map controls, the trail list, the editor, staging and the account are each a
+  pane, one open at a time, and the rail collapses them to give the map the
+  whole window. The map is never underneath the chrome, which is also what
+  keeps a click or a scroll in a pane from reaching it
+- Trail display controls with some grain to them: which travel modes the trails
+  have to be open to (multi-select), which *kinds* of line are worth drawing —
+  informal trails, tracks and fire roads, footways and sidewalks, paved
+  surfaces — and a stackable set of completeness lenses. Only informal trails
+  are drawn by default; sidewalks and pavement in particular outnumber the
+  trails many times over in town
 - Click a trail to select it — geometry and authoritative tags are read live
-  from the OSM API, and the panel shows difficulty, e-bike access and surface
+  from the OSM API, and the pane shows difficulty, e-bike access and surface
   through SLAB's guided vocabulary rather than raw tag keys
 - Multi-select: ctrl-click (Windows/Linux) or cmd-click (macOS) builds a working
   set of trails, and the same modifier *dragged* sweeps a selection box across
   the map — every trail with any part of it under the box joins the set. The
   panel becomes a bulk editor that applies one rating and/or one e-bike
   permission across all of them
-- A trail list for the current viewport, filtered by the same completeness
-  questions the lenses ask. Rows can be edited in place one at a time, or ticked
-  — including "select all" over a filter — to feed the same bulk editor
+- A trail list for the current viewport, filtered by everything the map is
+  already filtering by. A selector rather than an editor: every row carries its
+  signage glyph and what it is still missing, and ticking rows — including
+  "select all" over a filter — feeds the same bulk editor
 - Guided editing of difficulty and e-bike access: every editable field is a
   live picker whose options carry their meaning — e-bike access is allowed or
   not allowed, and each says what it claims, since the key is about e-bikes
-  alone. A trail already answering with a value Steward can't offer
+  alone — and says nothing at all about classes, because that is the next
+  question rather than part of this one. Answer it "allowed" and a second
+  picker discloses the **"up to" class**, in the vocabulary of wherever the
+  trail is: Class 1 in Oregon, pedelec in Italy, snorfiets in the Netherlands.
+  Steward writes the bottom rung of the local ladder — `electric_bicycle`
+  almost everywhere, `electric_mofa` in Belgium and the Netherlands, where the
+  lowest class the law puts on a path is a mofa rather than a pedelec — and
+  shows the rungs above it disabled, with the key each would write, rather than
+  pretending they aren't there. A cap is never turned into a ban on the classes
+  above it: those ride under `moped` and `motorcycle`, which say far more about
+  a trail than the question a rider was asked A trail already answering with a value Steward can't offer
   (`designated`, `permissive`) is read-only rather than overwritten, singly and
   in bulk. Choosing a value stages the change — no edit mode to enter
   and no check to press after — and an undo beside the field walks it back.
-  Staged edits accumulate across trails behind a counted badge on the map, and
-  the review sheet shows them grouped by trail — plain-language before/after
+  Staged edits accumulate across trails behind a counted badge on the rail, and
+  the staging pane shows them grouped by trail — plain-language before/after
   plus the actual tag diff — with a mandatory changeset comment before submit
 
 Editing is gated on authoritative tags: the picker stays disabled until the OSM
@@ -153,7 +173,7 @@ uploads**. Before the first one:
       regional channel
 
 The last two are obligations, not suggestions:
-[docs/slab-steward-osm-changeset-spec.md](docs/slab-steward-osm-changeset-spec.md)
+[docs/specs/slab-steward-osm-changeset-spec.md](docs/specs/slab-steward-osm-changeset-spec.md)
 §9-10.
 
 ### Other commands
@@ -288,16 +308,24 @@ anyway, so a standalone one would never be served. The access token is kept in
 `web/index.html` loads MapLibre GL JS from unpkg — the Flutter plugin's web
 implementation binds to that global rather than bundling its own copy.
 
-**Clicks reach the map even through panels on top of it.** The map is an
-`HtmlElementView`, and MapLibre
-GL JS listens for clicks on that DOM element itself. The browser delivers those
-clicks even when a Flutter panel, dropdown or dialog is painted on top, so
-without a guard every tap on the trail panel *also* reads as a tap on empty map
-and clears the selection out from under the editor.
-[steward_map_view.dart](lib/src/map/steward_map_view.dart) therefore only honours
-a map click whose press Flutter routed to the map itself — and reads the
-multi-select modifier off that same press, because MapLibre reports the click
-afterwards, by which point the key may already be up.
+**Clicks, scrolls and drags reach the map even through what is painted on top
+of it.** The map is an `HtmlElementView`, and MapLibre GL JS listens on that DOM
+element itself. The browser delivers every pointer event that lands inside its
+box, whatever Flutter has drawn over it — so a wheel over a panel zooms the map,
+a drag pans it, and a tap *also* reads as a tap on empty map and clears the
+selection out from under the editor. Three things answer that, and all three
+are load-bearing:
+
+- The sidebar is laid out **beside** the map — a `Row`, not a `Stack` — so most
+  of the chrome never overlaps it at all. See
+  [sidebar.dart](lib/src/ui/sidebar.dart).
+- Whatever still overlaps — the sidebar's own footprint, the submission dialog,
+  the zoom buttons — is wrapped in a `PointerInterceptor`, which puts a real DOM
+  element in front of the map to stop those events at the browser.
+- [steward_map_view.dart](lib/src/map/steward_map_view.dart) only honours a map
+  click whose press Flutter routed to the map itself — and reads the
+  multi-select modifier off that same press, because MapLibre reports the click
+  afterwards, by which point the key may already be up.
 
 **Why cmd and not ctrl on macOS:** ctrl-click *is* a right-click there. It
 arrives as `contextmenu`, never as a click, so the additive modifier has to be
@@ -433,7 +461,7 @@ answers is "I submitted it, refreshed, and it's still magenta".
 
 ## Design system
 
-The chrome follows [SLAB's design system](docs/SLAB%20Design%20System%20-%20Mockups%20v2.html)
+The chrome follows [SLAB's design system](docs/requirements/SLAB%20Design%20System%20-%20Mockups%20v2.html)
 — the sister app's mockups v2 — and its rule for a map screen: **the map is
 fixed, the chrome around it is ours**. Nothing in
 [otm_conventions.dart](lib/src/map/otm_conventions.dart) or the basemap changes
@@ -444,8 +472,8 @@ from [slab_theme.dart](lib/src/ui/slab_theme.dart).
 |---|---|---|
 | Ink 950 | `#0B1512` | the page under everything, and the pre-boot background in `web/index.html` |
 | Ink 900 | `#12211C` | recessed rows, the chips drawn on the map |
-| Ink 800 | `#1B2C25` | every floating panel and dialog |
-| Ink 700 | `#24382F` | cards, inputs and secondary buttons *on* a panel |
+| Ink 800 | `#1B2C25` | the sidebar pane and every dialog |
+| Ink 700 | `#24382F` | cards, inputs and secondary buttons *on* a pane |
 | Gold | `#C9A227` | the brand, the CTA, and any active control |
 | Cream / Sage / Sage-dim | `#F3EFE6` / `#93A69A` / `#5C6E62` | primary, secondary and tertiary text |
 | Rust | `#B5453A` | errors, and discarding staged work |
@@ -459,7 +487,9 @@ it is SLAB's own signage chip, loaded straight from
 rider.
 
 Not yet used from the handoff folder: `regions.json` (Steward has no region
-picker) and `placeholder_trail_hero.jpg` (no hero surface).
+picker — the e-bike vocabulary places a trail from its own coordinates, see
+[ebike_class.dart](lib/src/model/ebike_class.dart)) and
+`placeholder_trail_hero.jpg` (no hero surface).
 
 ## Layout
 
@@ -474,7 +504,12 @@ lib/
     model/
       difficulty.dart        SLAB scale ↔ mtb:scale:imba, and the signage glyphs
       surface.dart           SLAB picker ↔ surface=*
+      electric_bicycle.dart  the allowed / not-allowed question, and its glyph
+      ebike_class.dart       the local e-bike ladder, and which OSM key each
+                             rung rides under, by jurisdiction
       lens.dart              travel modes, and the lenses a selection is made of
+      trail_filters.dart     the kinds of line the map will draw
+      sidebar_section.dart   the panes the rail switches between
       trail.dart             a trail, tile-provisional or OSM-authoritative
       staged_edit.dart       one pending attribute change, with its tag diff
     osm/
@@ -488,19 +523,20 @@ lib/
       oauth_storage.dart     where the token lives between page loads
       submission_gate.dart   pre-submit checks, then the actual write
     state/
-      steward_state.dart     ChangeNotifier: mode, lenses, the working set,
-                             the in-view list, and staging
+      steward_state.dart     ChangeNotifier: what the map draws, the open
+                             pane, the working set, the in-view list, staging
     ui/
       slab_theme.dart        SLAB palette tokens and the app-wide ThemeData
-      slab_chrome.dart       brand lockup, panel headings, surfaces, tags
-      fields.dart            labelled rows, status badges, difficulty picker
-      map_controls.dart      travel mode picker and the multi-select lens menu
+      slab_chrome.dart       panel headings, surfaces, tags
+      fields.dart            labelled rows, status badges, guided pickers
+      sidebar.dart           the rail and the one pane beside the map
+      map_controls.dart      modes, trail kinds, lenses, and the legend
       legend.dart            what the colours mean
       trail_panel.dart       one selected trail, and its guided editor
       selection_panel.dart   several selected trails, and the bulk editor
       trail_list_panel.dart  every trail in the viewport, as a working list
-      staged_changes.dart    staged-changes badge and review sheet
-      account_button.dart    OSM sign-in / who you're writing as
+      staged_changes.dart    the staging pane and the submission gate dialog
+      account_panel.dart     OSM sign-in / who you're writing as
     steward_app.dart
 assets/
   slab/

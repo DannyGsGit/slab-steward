@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../model/lens.dart';
+import '../model/trail_filters.dart';
 import 'otm_conventions.dart';
 
 /// OpenTrailMap's published basemap stylesheet.
@@ -103,9 +104,14 @@ final Expr _stagedCoreWidth = [
 /// Everything a set of overlay layers is built from, resolved once per
 /// (mode, selection) pair.
 class _OverlayContext {
-  _OverlayContext(this.mode, this.lenses, this.tags);
+  _OverlayContext(this.modes, this.kinds, this.lenses, this.tags);
 
-  final TravelMode mode;
+  /// Who the map is being asked about. Empty asks nothing: every trail is
+  /// "allowed", and nothing is drawn as shut.
+  final Set<TravelMode> modes;
+
+  /// The kinds of line the rider is willing to see.
+  final Set<TrailKind> kinds;
 
   /// The questions being asked. A trail has to answer all of them to pass.
   final Set<Lens> lenses;
@@ -114,20 +120,31 @@ class _OverlayContext {
   /// by what Steward has since read or written.
   final TagSource tags;
 
-  /// Trails the chosen mode is allowed on.
-  late final Expr allowed = switch (mode.osmKey) {
-    null => ['literal', true],
-    final key => modeIsAllowed(key, tags),
+  /// Trails every chosen mode is allowed on.
+  ///
+  /// All-of rather than any-of: a rider who ticks both bikes and walkers is
+  /// asking about the shared-use network, not about the union of two
+  /// networks.
+  late final Expr allowed = switch ([
+    for (final mode in modes) modeIsAllowed(mode.osmKey, tags),
+  ]) {
+    [] => ['literal', true],
+    [final only] => only,
+    final tests => ['all', ...tests],
   };
+
+  /// Trails of a kind the rider hasn't switched off.
+  late final Expr shown = isKindShown(kinds, tags);
 
   /// One test per question the selection actually asks. [Lens.access] under
   /// [TravelMode.all] asks nothing, so it contributes nothing.
   late final List<Expr> _tests = [
     for (final lens in lenses.inOrder)
-      if (lens == Lens.access) ...[
-        if (mode.osmKey case final key?) accessIsSpecified(key, tags),
-      ] else
-        for (final key in lens.keys) attributeIsSpecified([key], tags),
+      if (lens == Lens.access)
+        for (final mode in modes) accessIsSpecified(mode.osmKey, tags)
+      // Any one of a lens' keys answering it is enough — see [Lens.keys].
+      else
+        attributeIsSpecified(lens.keys, tags),
   ];
 
   /// Whether the trail answers every selected lens' question.
@@ -148,7 +165,7 @@ class _OverlayContext {
   /// pale and marked instead — the same visual vocabulary, but a steward still
   /// needs to be able to click a trail in order to fix its tags, and a hidden
   /// trail can't be clicked.
-  bool get showsDisallowed => mode.osmKey != null;
+  bool get showsDisallowed => modes.isNotEmpty;
 
   /// Nothing is purple when nothing is being asked.
   bool get showsUnspecified => _tests.isNotEmpty;
@@ -161,32 +178,34 @@ Map<String, Expr> _trailFilters(_OverlayContext ctx) {
   final allowed = ctx.allowed;
   final specified = ctx.specified;
   final disallowed = <Object?>['!', allowed];
-  final isHighwayExpr = isHighway(ctx.tags);
+  // Everything the overlay is willing to draw at all: a trail line, of a kind
+  // the rider hasn't switched off.
+  final drawable = <Object?>['all', isHighway(ctx.tags), ctx.shown];
 
   return {
-    'paths': ['all', isHighwayExpr, allowed, specified, formal],
-    'informal-paths': ['all', isHighwayExpr, allowed, specified, informal],
+    'paths': ['all', drawable, allowed, specified, formal],
+    'informal-paths': ['all', drawable, allowed, specified, informal],
     // Deliberately not filtered by [specified]: "you can't ride here" outranks
     // "the data is missing", and a trail that matched neither condition would
     // fall through every layer and vanish off the map.
     'disallowed-paths': [
       'all',
       ctx.showsDisallowed,
-      isHighwayExpr,
+      drawable,
       disallowed,
       formal,
     ],
     'disallowed-informal-paths': [
       'all',
       ctx.showsDisallowed,
-      isHighwayExpr,
+      drawable,
       disallowed,
       informal,
     ],
     'unspecified-paths': [
       'all',
       ctx.showsUnspecified,
-      isHighwayExpr,
+      drawable,
       allowed,
       ['!', specified],
       formal,
@@ -194,7 +213,7 @@ Map<String, Expr> _trailFilters(_OverlayContext ctx) {
     'unspecified-informal-paths': [
       'all',
       ctx.showsUnspecified,
-      isHighwayExpr,
+      drawable,
       allowed,
       ['!', specified],
       informal,
@@ -403,8 +422,9 @@ Future<DateTime?> fetchTilesetBuiltAt() async {
 /// [baseStyle] is mutated in place — callers pass a fresh decode each time.
 Map<String, Object?> buildStewardStyle(
   Map<String, Object?> baseStyle, {
-  required TravelMode mode,
+  required Set<TravelMode> modes,
   required Set<Lens> lenses,
+  Set<TrailKind> kinds = const {...TrailKind.values},
   TagSource tags = const TagSource.tiles(),
 }) {
   final sources = baseStyle['sources'] as Map<String, Object?>;
@@ -434,7 +454,7 @@ Map<String, Object?> buildStewardStyle(
     }
   }
 
-  final ctx = _OverlayContext(mode, lenses, tags);
+  final ctx = _OverlayContext(modes, kinds, lenses, tags);
   final filters = _trailFilters(ctx);
 
   // What the overlay draws, for the layers that need to cover all of it —
@@ -448,7 +468,11 @@ Map<String, Object?> buildStewardStyle(
   // bytes; with [TagSource.overriding] substituting tags into every one of
   // them, it was 80% of the style document. `lens_override_test.dart` holds
   // the two spellings to each other.
-  final combinedFilter = isHighway(ctx.tags);
+  //
+  // The kind toggles ride along here rather than being a seventh layer: a
+  // hidden kind is hidden from the labels and the hit targets too, or a rider
+  // would still be able to click the sidewalk they just switched off.
+  final combinedFilter = <Object?>['all', isHighway(ctx.tags), ctx.shown];
 
   final overlay = _trailLayers(
     ctx,

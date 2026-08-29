@@ -8,6 +8,7 @@ import 'package:slab_steward/src/model/staged_edit.dart';
 import 'package:slab_steward/src/model/trail.dart';
 import 'package:slab_steward/src/osm/osm_api.dart';
 import 'package:slab_steward/src/state/steward_state.dart';
+import 'package:slab_steward/src/model/sidebar_section.dart';
 import 'package:slab_steward/src/ui/selection_panel.dart';
 import 'package:slab_steward/src/ui/staged_changes.dart';
 import 'package:slab_steward/src/ui/trail_list_panel.dart';
@@ -203,9 +204,7 @@ void main() {
       var notifications = 0;
       state.addListener(() => notifications++);
 
-      state.addFromTiles([
-        for (var i = 1; i <= 20; i++) _tile(i, 'Trail $i'),
-      ]);
+      state.addFromTiles([for (var i = 1; i <= 20; i++) _tile(i, 'Trail $i')]);
       expect(notifications, 1);
 
       // A box drawn over trails already selected changes nothing, and a box
@@ -326,11 +325,11 @@ void main() {
       final state = StewardState();
       addTearDown(state.dispose);
 
-      state.setTrailListOpen(true);
+      state.openSection(SidebarSection.trails);
       state.setVisibleTrails([_tile(1, 'Gravy Train')]);
       expect(state.visibleTrails, hasLength(1));
 
-      state.setTrailListOpen(false);
+      state.closeSection();
       expect(state.visibleTrails, isEmpty);
       expect(state.hasListedVisibleTrails, isFalse);
       // The trail itself is still known — a selection outlives the list.
@@ -346,7 +345,7 @@ void main() {
     }) async {
       final state = (osm ?? _FakeOsm()).newState();
       addTearDown(state.dispose);
-      state.setTrailListOpen(true);
+      state.openSection(SidebarSection.trails);
       state.setVisibleTrails(
         trails ??
             [
@@ -414,46 +413,38 @@ void main() {
       expect(osm.reads, hasLength(1));
     });
 
-    testWidgets('a row can be edited in place, without leaving the list', (
+    testWidgets('the list picks trails and edits nothing', (tester) async {
+      final osm = _FakeOsm();
+      final state = await pumpList(tester, osm: osm);
+
+      // No pickers: a 250-row list of live dropdowns answered a question the
+      // list is not asking, and spent an OSM read every time one was touched.
+      expect(find.byType(DropdownButton<Difficulty>), findsNothing);
+      // Every row still says how it is rated — as the signage glyph, which is
+      // how a rating reads everywhere else in both apps.
+      expect(find.byType(DifficultyIcon), findsNWidgets(2));
+      expect(find.text('Medium · Hardpack / Groomed'), findsOneWidget);
+
+      // The whole row is the selector, not just its checkbox.
+      await tester.tap(find.text('Bootcamp'));
+      await tester.pumpAndSettle();
+      expect(state.selectionCount, 1);
+      expect(state.isSelected(2), isTrue);
+      expect(state.hasStagedEdits, isFalse);
+    });
+
+    testWidgets('a rating staged elsewhere shows up on the row', (
       tester,
     ) async {
       final osm = _FakeOsm();
       final state = await pumpList(tester, osm: osm);
 
-      // The list is built from tile data; picking a value is what asks OSM for
-      // the authoritative tags the edit will be composed against, and it
-      // stages in the same gesture — no pencil, no confirm.
-      await tester.tap(find.byType(DropdownButton<Difficulty>).first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Difficult').last);
+      await state.setDifficulty(1, Difficulty.difficult);
       await tester.pumpAndSettle();
 
-      expect(osm.reads, hasLength(1));
       expect(state.stagedEditCount, 1);
       expect(find.text('STAGED'), findsOneWidget);
-      // Editing a row does not drag it into the working set.
-      expect(state.hasSelection, isFalse);
-
-      // And the undo beside it walks the change back.
-      await tester.tap(find.byTooltip('Discard this staged change'));
-      await tester.pumpAndSettle();
-      expect(state.hasStagedEdits, isFalse);
-    });
-
-    testWidgets('a trail OSM cannot confirm stages nothing, and says why', (
-      tester,
-    ) async {
-      final state = await pumpList(tester, osm: _FakeOsm(status: 500));
-
-      await tester.tap(find.byType(DropdownButton<Difficulty>).first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Difficult').last);
-      await tester.pumpAndSettle();
-
-      // Nothing is ever composed against tile data, so the pick is dropped
-      // rather than staged against a version that may already be stale.
-      expect(state.hasStagedEdits, isFalse);
-      expect(find.textContaining('OSM API returned 500'), findsOneWidget);
+      expect(find.text('Not rated → Difficult'), findsOneWidget);
     });
   });
 
@@ -476,7 +467,6 @@ void main() {
               listenable: state,
               builder: (context, _) => Stack(
                 children: [
-                  StagedChangesButton(state: state),
                   Align(
                     alignment: Alignment.topRight,
                     child: SelectionPanel(state: state),
@@ -489,7 +479,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('2 trails selected'), findsOneWidget);
+      // The pane's own heading names the count; the editor names it on every
+      // field it is about to write.
+      expect(find.text('DIFFICULTY ON ALL 2'), findsOneWidget);
 
       await tester.tap(find.byType(DropdownButton<Difficulty>));
       await tester.pumpAndSettle();
@@ -505,7 +497,8 @@ void main() {
         find.text('Difficulty — staged 1 change. 1 already rated medium.'),
         findsOneWidget,
       );
-      expect(find.text('Review 1 change'), findsOneWidget);
+      // What the rider sees of that count now lives on the rail's badge —
+      // see sidebar_test.dart.
     });
 
     testWidgets('one pass can set both fields, and reports each on its own', (
@@ -623,7 +616,13 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(body: StagedChangesDialog(state: state)),
+          home: Scaffold(
+            // The sidebar is what rebuilds a pane when the state changes.
+            body: ListenableBuilder(
+              listenable: state,
+              builder: (context, _) => StagedChangesPanel(state: state),
+            ),
+          ),
         ),
       );
       await tester.pumpAndSettle();

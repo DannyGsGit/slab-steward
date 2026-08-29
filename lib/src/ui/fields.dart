@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../model/difficulty.dart';
+import '../model/ebike_class.dart';
 import '../model/electric_bicycle.dart';
 import 'slab_theme.dart';
 
@@ -184,11 +185,13 @@ class DifficultyDropdown extends StatelessWidget {
   }
 }
 
-/// The e-bike permission picker.
+/// The e-bike permission picker: allowed, or not allowed, and nothing else.
 ///
 /// Every option carries its meaning, because "allowed" and "e-bike trail" are
 /// a distinction a rider can only get right if it's spelled out at the moment
-/// of choosing. See [EbikeAccess].
+/// of choosing. What it deliberately does *not* carry is a class — that is
+/// [EbikeClassDropdown]'s question, and it is only asked once this one has
+/// been answered yes. See [EbikeAccess].
 class ElectricBicycleDropdown extends StatelessWidget {
   const ElectricBicycleDropdown({
     super.key,
@@ -199,6 +202,7 @@ class ElectricBicycleDropdown extends StatelessWidget {
 
   final EbikeAccess? value;
   final ValueChanged<EbikeAccess?>? onChanged;
+
   final String hint;
 
   @override
@@ -220,6 +224,56 @@ class ElectricBicycleDropdown extends StatelessWidget {
   }
 }
 
+/// The "up to" cap: the fastest machine the trail is open to, named the way
+/// the sign at its trailhead names it.
+///
+/// Every rung of the local ladder is listed, including the ones Steward won't
+/// write — a rider who has just been told "Class 1 only" needs to see that
+/// Class 2 and 3 are the things being excluded, and that this tool is not yet
+/// the one that says so. Those rungs are shown and disabled rather than left
+/// out: an absent option looks like an oversight, a disabled one looks like a
+/// decision.
+class EbikeClassDropdown extends StatelessWidget {
+  const EbikeClassDropdown({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.jurisdiction,
+  });
+
+  final EbikeClass? value;
+  final ValueChanged<EbikeClass?>? onChanged;
+  final EbikeJurisdiction jurisdiction;
+
+  @override
+  Widget build(BuildContext context) {
+    return GuidedDropdown<EbikeClass>(
+      value: value,
+      onChanged: onChanged,
+      hint: 'Choose a class',
+      options: [
+        for (final rung in jurisdiction.selectable)
+          PickerOption(
+            rung,
+            label: rung.label,
+            enabled: rung.isSupported,
+            glyph: rung.isSupported
+                ? const EbikeIcon(EbikeAccess.allowed, size: 16)
+                : const Icon(
+                    Icons.lock_outline,
+                    size: 15,
+                    color: SlabColors.sageDim,
+                  ),
+            description: rung.isSupported
+                ? rung.detail
+                : '${rung.detail} — writes ${rung.osmKey}, which Steward '
+                      'does not edit yet.',
+          ),
+      ],
+    );
+  }
+}
+
 /// One option in a guided picker: what it's worth, what to call it, what it
 /// looks like, and — where the label alone can be misread — what it means.
 class PickerOption<T> {
@@ -228,11 +282,17 @@ class PickerOption<T> {
     required this.label,
     required this.glyph,
     this.description,
+    this.enabled = true,
   });
 
   final T value;
   final String label;
   final Widget glyph;
+
+  /// False for an option the picker shows but won't let anyone choose — see
+  /// [EbikeClassDropdown], where the rungs above the cap are on display
+  /// precisely so a rider can see what Steward is leaving alone.
+  final bool enabled;
 
   /// A line of plain language shown under [label] in the open menu. Null for
   /// options whose label is already unambiguous — a black diamond needs no
@@ -313,6 +373,7 @@ class GuidedDropdown<T> extends StatelessWidget {
             for (final option in options)
               DropdownMenuItem(
                 value: option.value,
+                enabled: option.enabled,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -341,8 +402,15 @@ class GuidedDropdown<T> extends StatelessWidget {
     );
   }
 
-  Widget _label(PickerOption<T> option) =>
-      Flexible(child: Text(option.label, overflow: TextOverflow.ellipsis));
+  /// A disabled option is still worth reading, so it keeps its glyph and its
+  /// explanation and only loses the colour of something you can press.
+  Widget _label(PickerOption<T> option) => Flexible(
+    child: Text(
+      option.label,
+      overflow: TextOverflow.ellipsis,
+      style: option.enabled ? null : const TextStyle(color: SlabColors.sageDim),
+    ),
+  );
 }
 
 /// What to call the multi-select modifier in front of the user.

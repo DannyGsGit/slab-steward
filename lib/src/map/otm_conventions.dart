@@ -13,6 +13,8 @@
 /// expressions, handed to the map as part of a style document.
 library;
 
+import '../model/trail_filters.dart';
+
 /// A MapLibre style expression.
 typedef Expr = List<Object?>;
 
@@ -244,7 +246,56 @@ const renderedTagKeys = {
   'mtb:scale:imba',
   'surface',
   'electric_bicycle',
+  'electric_mofa',
 };
+
+/// Surface values that mean pavement.
+///
+/// The paved half of OSM's `surface` vocabulary, plus the two spellings of
+/// concrete that carry a suffix. `sett` and `cobblestone` are in here because
+/// they are laid surfaces even where they ride like anything but.
+const _pavedSurfaces = [
+  'asphalt',
+  'chipseal',
+  'cobblestone',
+  'concrete',
+  'concrete:lanes',
+  'concrete:plates',
+  'metal',
+  'paved',
+  'paving_stones',
+  'sett',
+];
+
+/// True for features of the kind [kind] names.
+///
+/// A trail can match several — a paved informal footway is a real thing in
+/// OSM — which is exactly why the toggles are independent and a trail is
+/// hidden when it matches any kind that is switched off.
+Expr trailKindMatches(TrailKind kind, TagSource tags) => switch (kind) {
+  TrailKind.informal => ['==', tags.get('informal'), 'yes'],
+  TrailKind.track => ['==', tags.get('highway'), 'track'],
+  TrailKind.footway => ['==', tags.get('highway'), 'footway'],
+  TrailKind.paved => [
+    'in',
+    tags.get('surface'),
+    ['literal', _pavedSurfaces],
+  ],
+};
+
+/// True for features none of the switched-off kinds claim — what the map is
+/// willing to draw at all.
+///
+/// Applied to every layer in the overlay, hit targets included: a trail the
+/// rider has hidden must not be selectable through the line that is no longer
+/// there.
+Expr isKindShown(Set<TrailKind> shown, TagSource tags) {
+  final hidden = [
+    for (final kind in TrailKind.values)
+      if (!shown.contains(kind)) ['!', trailKindMatches(kind, tags)],
+  ];
+  return hidden.isEmpty ? ['literal', true] : ['all', ...hidden];
+}
 
 /// True when at least one of [keys] carries a usable value.
 Expr attributeIsSpecified(List<String> keys, TagSource tags) => [

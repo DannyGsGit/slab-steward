@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'difficulty.dart';
+import 'ebike_class.dart';
 import 'electric_bicycle.dart';
 import 'trail.dart';
 
@@ -38,6 +39,7 @@ class StagedEdit {
     this.baseTags = const {},
     this.difficulty,
     this.electricBicycle,
+    this.ebikeClass,
     this.note,
   });
 
@@ -66,9 +68,26 @@ class StagedEdit {
     );
   }
 
-  /// Stages an e-bike permission against [trail]'s current tags.
-  factory StagedEdit.electricBicycle(Trail trail, EbikeAccess value) {
-    final current = trail.tags[EbikeAccess.osmKey];
+  /// Stages an e-bike permission against [trail]'s current tags, about the
+  /// machine [cap] names.
+  ///
+  /// The cap is what the rider picked "up to" — a Class 1 in Bend, a pedelec
+  /// in Bergamo, and the same `electric_bicycle` key underneath both. It is
+  /// resolved from the trail's own position when the caller doesn't say; see
+  /// [Trail.ebikeJurisdiction].
+  ///
+  /// Only the rung being answered about is written. A cap says what *may*
+  /// ride, and Steward does not turn that into a ban on everything above it:
+  /// the keys those rungs use — `moped`, `motorcycle` — make claims about a
+  /// trail far past the question a rider was asked.
+  factory StagedEdit.electricBicycle(
+    Trail trail,
+    EbikeAccess value, {
+    EbikeClass? cap,
+  }) {
+    final ebikeClass = cap ?? trail.ebikeJurisdiction.cap;
+    final key = ebikeClass.osmKey;
+    final current = trail.tags[key];
     return StagedEdit(
       osmWayId: trail.osmWayId,
       trailName: trail.name,
@@ -84,11 +103,14 @@ class StagedEdit {
         (null, final raw?) => raw,
         _ => 'Not recorded',
       },
-      toLabel: value.label,
+      // The class is part of what is being said, so it is part of the
+      // before/after a rider reads back: "allowed up to Class 1".
+      toLabel: value == EbikeAccess.allowed
+          ? '${value.label} up to ${ebikeClass.label}'
+          : value.label,
       electricBicycle: value,
-      tagChanges: {
-        if (value.osmValue != current) EbikeAccess.osmKey: value.osmValue,
-      },
+      ebikeClass: ebikeClass,
+      tagChanges: {if (value.osmValue != current) key: value.osmValue},
     );
   }
 
@@ -136,6 +158,11 @@ class StagedEdit {
   /// Set when [attribute] is [TrailAttribute.electricBicycle], for the same
   /// reason [difficulty] is.
   final EbikeAccess? electricBicycle;
+
+  /// The rung [electricBicycle] answers about, and whose key this edit
+  /// writes. Kept so a re-staged edit — a rebase onto live tags, say — asks
+  /// the same question again rather than falling back to a default.
+  final EbikeClass? ebikeClass;
 
   /// A caveat worth showing next to this edit, if any.
   final String? note;

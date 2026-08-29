@@ -1,5 +1,6 @@
 import '../osm/osm_environment.dart';
 import 'difficulty.dart';
+import 'ebike_class.dart';
 import 'electric_bicycle.dart';
 import 'surface.dart';
 
@@ -18,6 +19,7 @@ class Trail {
     this.version,
     this.geometry,
     this.nodeIds,
+    this.tileCenter,
   });
 
   /// Built from what the vector tile carried. Provisional by definition.
@@ -36,7 +38,22 @@ class Trail {
       tags: tags,
       isAuthoritative: false,
       version: (props['OSM_VERSION'] as num?)?.toInt(),
+      tileCenter: _boundsCenter(props),
     );
+  }
+
+  /// The middle of the bounding box the tileset publishes for a feature, as
+  /// `[lon, lat]`. Not an OSM tag and never edited — it is here so a trail
+  /// knows roughly where it is before the OSM API has answered with real
+  /// geometry, which is all [ebikeJurisdiction] needs.
+  static List<double>? _boundsCenter(Map<String, Object?> props) {
+    final values = [
+      for (final key in ['MIN_LON', 'MAX_LON', 'MIN_LAT', 'MAX_LAT'])
+        props[key],
+    ];
+    if (values.any((v) => v is! num)) return null;
+    final [minLon, maxLon, minLat, maxLat] = values.cast<num>();
+    return [(minLon + maxLon) / 2, (minLat + maxLat) / 2];
   }
 
   static const _tileOnlyKeys = {'MIN_LAT', 'MAX_LAT', 'MIN_LON', 'MAX_LON'};
@@ -61,6 +78,27 @@ class Trail {
   /// round-trip a way through a changeset upload without truncating it.
   final List<int>? nodeIds;
 
+  /// Where the tileset says this trail is, as `[lon, lat]`. Kept across a
+  /// merge so a trail placed from a tile stays placed.
+  final List<double>? tileCenter;
+
+  /// Roughly where the trail is, as `[lon, lat]` — real geometry once the OSM
+  /// API has answered, the tile's bounding box before that, and null for a
+  /// trail Steward has no position for at all.
+  List<double>? get center {
+    final shape = geometry;
+    if (shape != null && shape.isNotEmpty) return shape[shape.length ~/ 2];
+    return tileCenter;
+  }
+
+  /// Whose e-bike vocabulary this trail is standing in. Trails Steward can't
+  /// place fall back to [EbikeJurisdiction.elsewhere], which speaks the one
+  /// dialect every jurisdiction shares.
+  EbikeJurisdiction get ebikeJurisdiction => switch (center) {
+    [final lon, final lat] => ebikeJurisdictionAt(lon, lat),
+    _ => EbikeJurisdiction.elsewhere,
+  };
+
   String? get name => tags['name'] ?? tags['mtb:name'];
 
   Difficulty get difficulty => Difficulty.fromImba(tags[Difficulty.osmKey]);
@@ -75,12 +113,20 @@ class Trail {
   /// read-only rather than silently reported as missing.
   bool get hasUnmappedSurface => rawSurface != null && surface == null;
 
-  String? get rawElectricBicycle => tags[EbikeAccess.osmKey];
+  /// The OSM key that carries this trail's e-bike answer.
+  ///
+  /// Local, because the machine a rider is asking about is local: a pedelec
+  /// rides under `electric_bicycle` almost everywhere, but the lowest class
+  /// Belgium and the Netherlands put on a path is a mofa, which rides under
+  /// `electric_mofa`. See [EbikeJurisdiction].
+  String get electricBicycleKey => ebikeJurisdiction.cap.osmKey;
+
+  String? get rawElectricBicycle => tags[electricBicycleKey];
 
   EbikeAccess? get electricBicycle => EbikeAccess.fromOsm(rawElectricBicycle);
 
   /// Whether OSM says anything at all about e-bikes here.
-  bool get hasElectricBicycle => tags.containsKey(EbikeAccess.osmKey);
+  bool get hasElectricBicycle => tags.containsKey(electricBicycleKey);
 
   /// An access value OSM knows about but SLAB's picker can't express — shown
   /// read-only, the same as an unmapped surface.
@@ -110,6 +156,7 @@ class Trail {
     version: version,
     geometry: geometry,
     nodeIds: nodeIds,
+    tileCenter: tileCenter,
   );
 
   Map<String, Object?> toGeoJsonFeature() => {

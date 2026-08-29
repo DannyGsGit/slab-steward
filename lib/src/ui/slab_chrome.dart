@@ -2,71 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'slab_theme.dart';
 
-/// The small pieces of SLAB chrome every panel is assembled from: the brand
-/// lockup, a panel heading, the recessed row, and the tag pill.
+/// The small pieces of SLAB chrome every panel is assembled from: a panel
+/// heading, the recessed row, and the tag pill.
 ///
 /// They live together for the same reason the pickers in `fields.dart` do —
 /// four panels that each drew their own heading would drift into four
-/// different products. See `docs/SLAB Design System - Mockups v2.html`.
-
-/// The SLAB mark and the app's name, as the design doc's rail logo reads on a
-/// screen this size: the mountain tile, then the wordmark spaced out in gold.
-class SlabBrand extends StatelessWidget {
-  const SlabBrand({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 18, 10),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(9),
-              child: Image.asset(
-                'assets/slab/logo.png',
-                width: 30,
-                height: 30,
-                filterQuality: FilterQuality.medium,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'SLAB',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 5,
-                    color: SlabColors.gold,
-                    height: 1.1,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'STEWARD',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 2.6,
-                    color: SlabColors.sageDim,
-                    height: 1.1,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+/// different products. See `docs/requirements/SLAB Design System - Mockups v2.html`.
 
 /// The heading of a panel or dialog: the title, whatever the panel wants
 /// beside it, and the control that dismisses it.

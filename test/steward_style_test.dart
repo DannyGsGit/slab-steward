@@ -34,7 +34,7 @@ void main() {
   test('adds the trails and selection sources', () {
     final style = buildStewardStyle(
       fakeBaseStyle(),
-      mode: TravelMode.mtb,
+      modes: {TravelMode.mtb},
       lenses: attributeLenses,
     );
     final sources = style['sources']! as Map<String, Object?>;
@@ -48,7 +48,7 @@ void main() {
   test('credits OSM and OSM US on the trails source', () {
     final style = buildStewardStyle(
       fakeBaseStyle(),
-      mode: TravelMode.mtb,
+      modes: {TravelMode.mtb},
       lenses: const <Lens>{},
     );
     final trails = (style['sources']! as Map)['trails']! as Map;
@@ -58,7 +58,7 @@ void main() {
   test('hides the basemap trail layers so trails are not drawn twice', () {
     final style = buildStewardStyle(
       fakeBaseStyle(),
-      mode: TravelMode.mtb,
+      modes: {TravelMode.mtb},
       lenses: const <Lens>{},
     );
     for (final id in ['trails_official', 'trails_informal', 'trail_labels']) {
@@ -72,7 +72,7 @@ void main() {
   test('inserts the overlay above the basemap but below labels', () {
     final style = buildStewardStyle(
       fakeBaseStyle(),
-      mode: TravelMode.mtb,
+      modes: {TravelMode.mtb},
       lenses: attributeLenses,
     );
     final ids = layersOf(style).map((l) => l['id']).toList();
@@ -85,7 +85,7 @@ void main() {
   test('the staged glow sits under the selection and the trail lines', () {
     final style = buildStewardStyle(
       fakeBaseStyle(),
-      mode: TravelMode.mtb,
+      modes: {TravelMode.mtb},
       lenses: attributeLenses,
     );
     final ids = layersOf(style).map((l) => l['id']).toList();
@@ -113,7 +113,7 @@ void main() {
       (l) => l['id'] == 'qa_insertion_point',
     );
     expect(
-      () => buildStewardStyle(base, mode: TravelMode.mtb, lenses: const {}),
+      () => buildStewardStyle(base, modes: {TravelMode.mtb}, lenses: const {}),
       throwsStateError,
     );
   });
@@ -126,7 +126,7 @@ void main() {
     test('disallowed layers ignore the lenses', () {
       final style = buildStewardStyle(
         fakeBaseStyle(),
-        mode: TravelMode.mtb,
+        modes: {TravelMode.mtb},
         lenses: attributeLenses,
       );
       final filter = layerById(style, 'disallowed-paths')!['filter'].toString();
@@ -136,7 +136,7 @@ void main() {
     test('the lenses gate the allowed layers', () {
       final style = buildStewardStyle(
         fakeBaseStyle(),
-        mode: TravelMode.mtb,
+        modes: {TravelMode.mtb},
         lenses: attributeLenses,
       );
       final filter = layerById(
@@ -151,7 +151,7 @@ void main() {
   test('no lens selected means nothing renders as missing', () {
     final style = buildStewardStyle(
       fakeBaseStyle(),
-      mode: TravelMode.all,
+      modes: const <TravelMode>{},
       lenses: const <Lens>{},
     );
     // The layer still exists, but its filter is switched off outright.

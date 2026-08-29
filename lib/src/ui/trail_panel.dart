@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../model/difficulty.dart';
+import '../model/ebike_class.dart';
 import '../model/electric_bicycle.dart';
 import '../model/staged_edit.dart';
 import '../model/trail.dart';
@@ -23,6 +24,9 @@ import 'slab_theme.dart';
 ///
 /// One trail only. Several selected trails get [SelectionPanel] instead, which
 /// applies one value across all of them.
+///
+/// Lives in the sidebar's Selection pane, which supplies the heading and the
+/// close control — hence no card and no width of its own.
 class TrailPanel extends StatelessWidget {
   const TrailPanel({super.key, required this.state});
 
@@ -35,92 +39,67 @@ class TrailPanel extends StatelessWidget {
 
     final theme = Theme.of(context);
     final error = state.readErrorFor(trail.osmWayId);
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        width: 340,
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            PanelHeader(
-              title: trail.name ?? 'Unnamed trail',
-              closeTooltip: 'Clear selection',
-              onClose: state.clearSelection,
-            ),
-            Flexible(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _SourceLine(trail: trail, state: state),
-                      const SizedBox(height: 16),
-                      DifficultyField(trail: trail, state: state),
-                      const SizedBox(height: 14),
-                      ElectricBicycleField(trail: trail, state: state),
-                      if (trail.isInformal) ...[
-                        const SizedBox(height: 14),
-                        const Align(
-                          alignment: Alignment.centerLeft,
-                          child: SlabTag(
-                            icon: Icons.report_gmailerrorred_outlined,
-                            label: 'Tagged informal in OpenStreetMap',
-                          ),
-                        ),
-                      ],
-                      if (error != null) ...[
-                        const SizedBox(height: 14),
-                        Text(
-                          error,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.error,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 14),
-                      // The additive gesture is invisible until someone tells
-                      // you about it, and this panel is where a rider already
-                      // is when the thought "I want to do this to the next one
-                      // too" occurs.
-                      SlabSurface(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.done_all,
-                              size: 15,
-                              color: SlabColors.gold,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '$multiSelectModifier-click another trail — '
-                                'or $multiSelectModifier-drag a box — to edit '
-                                'several at once',
-                                style: theme.textTheme.bodySmall,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      const Divider(height: 1),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          icon: const Icon(Icons.open_in_new, size: 15),
-                          label: Text('Way ${trail.osmWayId} on osm.org'),
-                          onPressed: () => launchUrl(Uri.parse(trail.osmUrl)),
-                        ),
-                      ),
-                    ],
-                  ),
+            _SourceLine(trail: trail, state: state),
+            const SizedBox(height: 16),
+            DifficultyField(trail: trail, state: state),
+            const SizedBox(height: 14),
+            ElectricBicycleField(trail: trail, state: state),
+            if (trail.isInformal) ...[
+              const SizedBox(height: 14),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: SlabTag(
+                  icon: Icons.report_gmailerrorred_outlined,
+                  label: 'Tagged informal in OpenStreetMap',
                 ),
+              ),
+            ],
+            if (error != null) ...[
+              const SizedBox(height: 14),
+              Text(
+                error,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            // The additive gesture is invisible until someone tells you about
+            // it, and this panel is where a rider already is when the thought
+            // "I want to do this to the next one too" occurs.
+            SlabSurface(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.done_all, size: 15, color: SlabColors.gold),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$multiSelectModifier-click another trail — or '
+                      '$multiSelectModifier-drag a box — to edit several at '
+                      'once',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.open_in_new, size: 15),
+                label: Text('Way ${trail.osmWayId} on osm.org'),
+                onPressed: () => launchUrl(Uri.parse(trail.osmUrl)),
               ),
             ),
           ],
@@ -261,7 +240,13 @@ class DifficultyField extends StatelessWidget {
 }
 
 /// E-bike permission for one trail, on the same terms as [DifficultyField],
-/// with one of its own.
+/// with two of its own.
+///
+/// '''Which e-bike.''' "Allowed" is not an answer until it says which machine,
+/// and which machine has a different name in every jurisdiction. So an
+/// allowed trail also carries a cap — "up to Class 1" in Oregon, "up to
+/// Pedelec" in Italy — read off the trail's own position. Steward writes the
+/// bottom rung and shows the rest disabled; see [EbikeJurisdiction].
 ///
 /// A trail already answering with a value outside Steward's two options —
 /// `designated`, `permissive`, anything else in the access vocabulary — is
@@ -284,6 +269,13 @@ class ElectricBicycleField extends StatelessWidget {
       state.stagedEditFor(trail.osmWayId, TrailAttribute.electricBicycle);
 
   EbikeAccess? get _shown => _staged?.electricBicycle ?? trail.electricBicycle;
+
+  /// Whose vocabulary this trail is standing in.
+  EbikeJurisdiction get _jurisdiction => trail.ebikeJurisdiction;
+
+  /// The cap the picker shows: the one already staged, or the highest rung
+  /// Steward is willing to write here.
+  EbikeClass get _cap => _staged?.ebikeClass ?? _jurisdiction.cap;
 
   /// See the class doc: a value the picker can't express is not a gap to fill,
   /// it's an answer to leave alone.
@@ -347,22 +339,69 @@ class ElectricBicycleField extends StatelessWidget {
                 onChanged: _canEdit
                     ? (value) {
                         if (value != null) {
-                          state.applyElectricBicycle([trail], value);
+                          state.applyElectricBicycle([trail], value, cap: _cap);
                         }
                       }
                     : null,
               ),
             ),
+          // What the answer above claims, directly under it: the class
+          // question below is a separate sentence and has to read as one.
+          if (note != null) ...[
+            const SizedBox(height: 6),
+            Text(note, style: theme.textTheme.bodySmall),
+          ],
+          // The cap only means anything about a trail e-bikes may ride. On a
+          // trail that shuts them out, "up to Class 1" would be a second
+          // sentence contradicting the first.
+          if (shown == EbikeAccess.allowed) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text('UP TO', style: theme.textTheme.labelSmall),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _jurisdiction.label,
+                    style: theme.textTheme.bodySmall,
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            _WhileReading(
+              isEditable: _canEdit,
+              child: EbikeClassDropdown(
+                value: _cap,
+                jurisdiction: _jurisdiction,
+                onChanged: _canEdit
+                    ? (value) {
+                        if (value != null) {
+                          state.applyElectricBicycle(
+                            [trail],
+                            EbikeAccess.allowed,
+                            cap: value,
+                          );
+                        }
+                      }
+                    : null,
+              ),
+            ),
+            const SizedBox(height: 6),
+            // The class the rider has landed on, in the terms their local law
+            // defines it with — the same line the open menu shows under it.
+            Text(_cap.detail, style: theme.textTheme.bodySmall),
+            if (_cap.note case final capNote?)
+              Text(capNote, style: theme.textTheme.bodySmall),
+          ],
           if (staged != null) ...[
             const SizedBox(height: 6),
             Text(
               'Was ${staged.fromLabel.toLowerCase()}',
               style: theme.textTheme.bodySmall,
             ),
-          ],
-          if (note != null) ...[
-            const SizedBox(height: 6),
-            Text(note, style: theme.textTheme.bodySmall),
           ],
         ],
       ),

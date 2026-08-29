@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../map/otm_conventions.dart';
 import '../model/lens.dart';
+import '../model/trail_filters.dart';
 import '../state/steward_state.dart';
 
 /// Explains the line vocabulary currently on screen.
@@ -17,38 +18,36 @@ class Legend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lenses = state.lenses.inOrder;
+    final modes = [
+      for (final mode in TravelMode.values)
+        if (state.modes.contains(mode)) mode.noun,
+    ];
     final entries = <_Entry>[
       if (lenses.tintsSpecified)
         _Entry(_color(specifiedColor), 'Has ${_list(lenses, 'and')}')
       else
         _Entry(_color(trailColor), 'Trail'),
       if (lenses.isNotEmpty) _Entry(_color(unspecifiedColor), _missing(lenses)),
-      if (state.mode != TravelMode.all)
+      if (modes.isNotEmpty)
         _Entry(
           _color(noAccessTrailColor),
-          'Not open to this mode',
+          'Not open to ${_join(modes, 'or')}',
           dashed: true,
         ),
-      _Entry(_color(trailColor), 'Informal / unofficial', dashed: true),
+      // Only worth explaining while the map is drawing them.
+      if (state.kinds.contains(TrailKind.informal))
+        _Entry(_color(trailColor), 'Informal / unofficial', dashed: true),
     ];
 
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 11, 16, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Legend', style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: 10),
-            for (final entry in entries) ...[
-              entry,
-              if (entry != entries.last) const SizedBox(height: 8),
-            ],
-          ],
-        ),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final entry in entries) ...[
+          entry,
+          if (entry != entries.last) const SizedBox(height: 8),
+        ],
+      ],
     );
   }
 
@@ -56,8 +55,11 @@ class Legend extends StatelessWidget {
       Color(int.parse(hex.substring(1), radix: 16) | 0xFF000000);
 
   /// The selected lenses as prose: "difficulty and e-bike rule".
-  static String _list(List<Lens> lenses, String conjunction) {
-    final nouns = [for (final lens in lenses) lens.noun];
+  static String _list(List<Lens> lenses, String conjunction) =>
+      _join([for (final lens in lenses) lens.noun], conjunction);
+
+  /// A list of nouns as English: "a", "a or b", "a, b or c".
+  static String _join(List<String> nouns, String conjunction) {
     if (nouns.length == 1) return nouns.single;
     return '${nouns.take(nouns.length - 1).join(', ')} '
         '$conjunction ${nouns.last}';
@@ -81,15 +83,22 @@ class _Entry extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 28,
-          height: 4,
-          child: CustomPaint(painter: _LinePainter(color, dashed)),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: SizedBox(
+            width: 28,
+            height: 4,
+            child: CustomPaint(painter: _LinePainter(color, dashed)),
+          ),
         ),
         const SizedBox(width: 10),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        // Wraps rather than overflows: a legend line names every mode being
+        // asked about, and two of those do not fit on one line of a pane.
+        Expanded(
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ),
       ],
     );
   }

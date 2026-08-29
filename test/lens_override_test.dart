@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:slab_steward/src/map/otm_conventions.dart';
 import 'package:slab_steward/src/map/steward_style.dart';
 import 'package:slab_steward/src/model/lens.dart';
+import 'package:slab_steward/src/model/trail_filters.dart';
 
 /// Evaluates the subset of MapLibre's expression language Steward's filters
 /// use, so the style document can be checked without a browser.
@@ -74,11 +75,20 @@ Map<String, Object?> baseStyle() => {
   ],
 };
 
+/// The mode selections the coverage sweep stands on: nobody (no access
+/// filtering at all), one mode, and both at once.
+const _modeSelections = <Set<TravelMode>>[
+  {},
+  {TravelMode.mtb},
+  {TravelMode.mtb, TravelMode.foot},
+];
+
 /// Which of the overlay's trail-line layers would draw [props].
 Set<String> layersDrawing(
   Map<String, Object?> props, {
-  required TravelMode mode,
+  required Set<TravelMode> modes,
   required Set<Lens> lenses,
+  Set<TrailKind> kinds = const {...TrailKind.values},
   TagSource tags = const TagSource.tiles(),
 }) {
   const lineLayers = {
@@ -91,8 +101,9 @@ Set<String> layersDrawing(
   };
   final style = buildStewardStyle(
     baseStyle(),
-    mode: mode,
+    modes: modes,
     lenses: lenses,
+    kinds: kinds,
     tags: tags,
   );
   final layers = (style['layers'] as List).cast<Map<String, Object?>>();
@@ -166,12 +177,12 @@ void main() {
       {Lens.access, Lens.difficulty, Lens.electricBicycle},
     ];
 
-    for (final mode in TravelMode.values) {
+    for (final modes in _modeSelections) {
       for (final lenses in selections) {
         for (final tags in [const TagSource.tiles(), overriding]) {
           final style = buildStewardStyle(
             baseStyle(),
-            mode: mode,
+            modes: modes,
             lenses: lenses,
             tags: tags,
           );
@@ -190,13 +201,91 @@ void main() {
               evaluate(coverage, props),
               drawn,
               reason:
-                  'mode ${mode.name}, lenses ${lenses.map((l) => l.name)}, '
+                  'modes ${modes.map((m) => m.name)}, lenses ${lenses.map((l) => l.name)}, '
                   'props $props',
             );
           }
         }
       }
     }
+  });
+
+  group('the kind toggles', () {
+    Map<String, Object?> feature(Map<String, Object?> tags) => {
+      'OSM_ID': 7,
+      'highway': 'path',
+      'bicycle': 'designated',
+      'mtb:scale:imba': '2',
+      ...tags,
+    };
+
+    Set<String> drawnWith(Map<String, Object?> props, Set<TrailKind> kinds) =>
+        layersDrawing(
+          props,
+          modes: {TravelMode.mtb},
+          lenses: {Lens.difficulty},
+          kinds: kinds,
+        );
+
+    test('a paved path is drawn only while pavement is switched on', () {
+      final paved = feature({'surface': 'asphalt'});
+      expect(drawnWith(paved, TrailKind.defaults), isEmpty);
+      expect(drawnWith(paved, {...TrailKind.defaults, TrailKind.paved}), {
+        'paths',
+      });
+      expect(
+        drawnWith(feature({'surface': 'ground'}), TrailKind.defaults),
+        {'paths'},
+        reason: 'switching off pavement must not take dirt with it',
+      );
+    });
+
+    test('sidewalks stay off the map until they are asked for', () {
+      final sidewalk = feature({'highway': 'footway'});
+      expect(drawnWith(sidewalk, TrailKind.defaults), isEmpty);
+      expect(drawnWith(sidewalk, {...TrailKind.defaults, TrailKind.footway}), {
+        'paths',
+      });
+    });
+
+    test('informal lines are drawn by default; doubletrack is asked for', () {
+      final track = feature({'highway': 'track'});
+      final informal = feature({'informal': 'yes'});
+
+      // Hard-coded rather than read off TrailKind.defaults: which kinds a
+      // fresh session draws is a product decision, and this is what notices
+      // when one changes.
+      expect(TrailKind.defaults, {TrailKind.informal});
+      expect(drawnWith(informal, TrailKind.defaults), {'informal-paths'});
+      expect(drawnWith(track, TrailKind.defaults), isEmpty);
+
+      expect(drawnWith(track, {TrailKind.track}), {'paths'});
+      expect(drawnWith(informal, {TrailKind.track}), isEmpty);
+    });
+
+    test('a hidden trail is not clickable either', () {
+      // The hit targets are a separate layer with a filter of their own, and
+      // a trail nobody can see must not still be selectable through the line
+      // that is no longer drawn.
+      final style = buildStewardStyle(
+        baseStyle(),
+        modes: {TravelMode.mtb},
+        lenses: {Lens.difficulty},
+        kinds: TrailKind.defaults,
+      );
+      final pointer = (style['layers'] as List)
+          .cast<Map<String, Object?>>()
+          .firstWhere((l) => l['id'] == pointerTargetLayerId);
+      expect(
+        evaluate(pointer['filter'], feature({'highway': 'footway'})),
+        isFalse,
+      );
+      expect(
+        evaluate(pointer['filter'], feature({'surface': 'asphalt'})),
+        isFalse,
+      );
+      expect(evaluate(pointer['filter'], feature({})), isTrue);
+    });
   });
 
   // A formal trail anyone may ride, with no IMBA rating — the exact thing the
@@ -212,7 +301,7 @@ void main() {
       expect(
         layersDrawing(
           unrated(),
-          mode: TravelMode.mtb,
+          modes: {TravelMode.mtb},
           lenses: {Lens.difficulty},
         ),
         {'unspecified-paths'},
@@ -223,7 +312,7 @@ void main() {
       expect(
         layersDrawing(
           {...unrated(), 'mtb:scale:imba': '4'},
-          mode: TravelMode.mtb,
+          modes: {TravelMode.mtb},
           lenses: {Lens.difficulty},
         ),
         {'paths'},
@@ -238,7 +327,7 @@ void main() {
         expect(
           layersDrawing(
             unrated(),
-            mode: TravelMode.mtb,
+            modes: {TravelMode.mtb},
             lenses: {Lens.difficulty},
             tags: const TagSource.overriding({
               100: {
@@ -261,7 +350,7 @@ void main() {
       expect(
         layersDrawing(
           {...unrated(), 'mtb:scale:imba': '4'},
-          mode: TravelMode.mtb,
+          modes: {TravelMode.mtb},
           lenses: {Lens.difficulty},
           tags: const TagSource.overriding({
             100: {'highway': 'path', 'bicycle': 'designated'},
@@ -275,7 +364,7 @@ void main() {
       expect(
         layersDrawing(
           unrated(id: 999),
-          mode: TravelMode.mtb,
+          modes: {TravelMode.mtb},
           lenses: {Lens.difficulty},
           tags: const TagSource.overriding({
             100: {'highway': 'path', 'mtb:scale:imba': '4'},
@@ -289,7 +378,11 @@ void main() {
       // Nothing Steward writes touches access, so this can only arrive via a
       // read — source 2 of the cache.
       expect(
-        layersDrawing(unrated(), mode: TravelMode.mtb, lenses: {Lens.access}),
+        layersDrawing(
+          unrated(),
+          modes: {TravelMode.mtb},
+          lenses: {Lens.access},
+        ),
         {'unspecified-paths'},
         reason:
             'bicycle=designated does not say whether *mountain biking* is '
@@ -298,7 +391,7 @@ void main() {
       expect(
         layersDrawing(
           unrated(),
-          mode: TravelMode.mtb,
+          modes: {TravelMode.mtb},
           lenses: {Lens.access},
           tags: const TagSource.overriding({
             100: {'highway': 'path', 'bicycle': 'designated', 'mtb': 'yes'},
@@ -309,7 +402,7 @@ void main() {
       expect(
         layersDrawing(
           unrated(),
-          mode: TravelMode.mtb,
+          modes: {TravelMode.mtb},
           lenses: {Lens.access},
           tags: const TagSource.overriding({
             100: {'highway': 'path', 'bicycle': 'no'},
@@ -323,7 +416,7 @@ void main() {
     test('the attribute lenses need every key, override or not', () {
       Set<String> withTags(Map<String, String> override) => layersDrawing(
         unrated(),
-        mode: TravelMode.mtb,
+        modes: {TravelMode.mtb},
         lenses: {Lens.difficulty, Lens.electricBicycle},
         tags: TagSource.overriding({100: override}),
       );
@@ -350,7 +443,7 @@ void main() {
     test('an override drives informal-ness and hit-testing as well', () {
       final style = buildStewardStyle(
         baseStyle(),
-        mode: TravelMode.mtb,
+        modes: {TravelMode.mtb},
         lenses: {Lens.difficulty},
         tags: const TagSource.overriding({
           100: {'highway': 'path', 'informal': 'yes', 'mtb:scale:imba': '4'},
@@ -359,7 +452,7 @@ void main() {
       expect(
         layersDrawing(
           unrated(),
-          mode: TravelMode.mtb,
+          modes: {TravelMode.mtb},
           lenses: {Lens.difficulty},
           tags: const TagSource.overriding({
             100: {'highway': 'path', 'informal': 'yes', 'mtb:scale:imba': '4'},

@@ -88,7 +88,7 @@ class OsmApi {
 
   /// Opens a changeset carrying [tags] and returns its id. The first of the
   /// three calls a submission makes — see
-  /// docs/slab-steward-osm-changeset-spec.md §1.
+  /// docs/specs/slab-steward-osm-changeset-spec.md §1.
   Future<int> openChangeset({
     required Map<String, String> tags,
     required String bearerToken,

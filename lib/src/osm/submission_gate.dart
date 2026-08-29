@@ -24,7 +24,7 @@ class SubmissionCheck {
 /// A tag that changed on the server between staging and submit in a way that
 /// conflicts with what the rider is about to write.
 ///
-/// Per docs/slab-steward-osm-changeset-spec.md §4: this only fires when the
+/// Per docs/specs/slab-steward-osm-changeset-spec.md §4: this only fires when the
 /// live value differs from both what the edit was staged against
 /// ([originalValue]) *and* what the rider wants to submit ([desiredValue]).
 /// If the live value already matches [desiredValue], someone else made the

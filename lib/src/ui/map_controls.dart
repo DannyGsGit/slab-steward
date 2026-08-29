@@ -1,170 +1,169 @@
 import 'package:flutter/material.dart';
 
 import '../model/lens.dart';
+import '../model/trail_filters.dart';
 import '../state/steward_state.dart';
+import 'legend.dart';
 import 'slab_theme.dart';
 
-/// Travel mode and lens pickers — what's drawn, and what questions the colours
-/// are answering. Both concepts are OpenTrailMap's.
+/// What the map draws, what the colours mean, and the legend that reads them
+/// back — the sidebar's Map pane.
 ///
-/// Collapsible: the pickers are only useful while being adjusted, so they
-/// give up screen real estate to the map the rest of the time.
-class MapControls extends StatefulWidget {
-  const MapControls({super.key, required this.state});
+/// Three independent questions, in the order a rider asks them:
+///
+///  1. '''Who is this for?''' Travel modes, multi-select. The access question.
+///  2. '''What counts as a trail?''' Kinds, multi-select. The shape question:
+///     doubletrack, pavement, sidewalks, unsanctioned lines.
+///  3. '''What am I looking for?''' Lenses. The gap-finding question.
+///
+/// It used to be one three-way switch — all / mountain biking / hiking — which
+/// answered the first question badly and never asked the second at all: a
+/// steward zooming into a town watched their trail network disappear under
+/// sidewalks and driveways, with no control that could say so.
+class MapControlsPanel extends StatelessWidget {
+  const MapControlsPanel({super.key, required this.state});
 
   final StewardState state;
 
   @override
-  State<MapControls> createState() => _MapControlsState();
-}
-
-class _MapControlsState extends State<MapControls> {
-  bool _expanded = false;
-
-  @override
   Widget build(BuildContext context) {
-    final state = widget.state;
-    // "Unknown access" is meaningless without a travel mode to ask about.
+    // "Unknown access" is meaningless without a mode to ask about.
     final lenses = Lens.values
-        .where((l) => l != Lens.access || state.mode != TravelMode.all)
+        .where((l) => l != Lens.access || state.modes.isNotEmpty)
         .toList();
 
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          16,
-          10,
-          8,
-          0,
-        ).add(EdgeInsets.only(bottom: _expanded ? 0 : 10)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            InkWell(
-              onTap: () => setState(() => _expanded = !_expanded),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const _Label('Map controls'),
-                    const SizedBox(width: 6),
-                    Icon(
-                      _expanded ? Icons.expand_less : Icons.expand_more,
-                      size: 18,
-                      color: SlabColors.gold,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (_expanded) ...[
-              const SizedBox(height: 10),
-              const _Label('Show'),
-              const SizedBox(height: 6),
-              SegmentedButton<TravelMode>(
-                showSelectedIcon: false,
-                segments: [
-                  for (final mode in TravelMode.values)
-                    ButtonSegment(value: mode, label: Text(mode.label)),
-                ],
-                selected: {state.mode},
-                onSelectionChanged: (s) => state.setMode(s.first),
-              ),
-              const SizedBox(height: 16),
-              const _Label('Highlight'),
-              const SizedBox(height: 6),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16, right: 8),
-                child: _LensMenu(state: state, lenses: lenses),
-              ),
-            ],
-          ],
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+      children: [
+        const _SectionLabel('Access'),
+        const _SectionHint(
+          'Trails closed to everyone ticked here are faded',
         ),
-      ),
+        for (final mode in TravelMode.values)
+          _ToggleRow(
+            label: mode.label,
+            value: state.modes.contains(mode),
+            onChanged: (on) => state.setModeEnabled(mode, on),
+          ),
+        const SizedBox(height: 20),
+        const _SectionLabel('Include'),
+        const _SectionHint(
+          'Select trail types to show.',
+        ),
+        for (final kind in TrailKind.values)
+          _ToggleRow(
+            label: kind.label,
+            description: kind.description,
+            value: state.kinds.contains(kind),
+            onChanged: (on) => state.setKindEnabled(kind, on),
+          ),
+        const SizedBox(height: 20),
+        const _SectionLabel('Highlight'),
+        const _SectionHint(
+          'Rules stack: a trail has to answer every one you tick before it '
+          'counts as done. Tick none for the plain map.',
+        ),
+        for (final lens in lenses)
+          _ToggleRow(
+            label: lens.label,
+            value: state.lenses.contains(lens),
+            onChanged: (on) => state.setLensEnabled(lens, on),
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: state.lenses.isEmpty
+                ? null
+                : () => state.setLenses(const {}),
+            child: const Text('Clear all'),
+          ),
+        ),
+        const SizedBox(height: 16),
+        const _SectionLabel('Legend'),
+        const SizedBox(height: 10),
+        Legend(state: state),
+      ],
     );
   }
 }
 
-/// The highlight rules, as a multi-select drop-down.
-///
-/// A menu rather than a row of chips because the rules stack: any combination
-/// is legal, and a trail has to answer all of the ticked ones to count as
-/// done. Ticking none of them is the plain OpenTrailMap map.
-class _LensMenu extends StatelessWidget {
-  const _LensMenu({required this.state, required this.lenses});
+/// One toggle in the pane: the box, what it's called, and — where the name
+/// alone doesn't say which trails it covers — a line that does.
+class _ToggleRow extends StatelessWidget {
+  const _ToggleRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.description,
+  });
 
-  final StewardState state;
-
-  /// The rules on offer, already filtered to the ones the current travel mode
-  /// can meaningfully ask.
-  final List<Lens> lenses;
+  final String label;
+  final String? description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final selected = state.lenses.inOrder;
-
-    return MenuAnchor(
-      // Ticking a box has to leave the menu open, or picking two rules would
-      // mean opening it twice.
-      menuChildren: [
-        for (final lens in lenses)
-          CheckboxMenuButton(
-            value: state.lenses.contains(lens),
-            closeOnActivate: false,
-            onChanged: (on) => state.setLensEnabled(lens, on ?? false),
-            child: Text(lens.label),
-          ),
-        const Divider(height: 1),
-        MenuItemButton(
-          closeOnActivate: false,
-          onPressed: selected.isEmpty ? null : () => state.setLenses(const {}),
-          child: const Text('Clear all'),
-        ),
-      ],
-      builder: (context, controller, _) => OutlinedButton(
-        onPressed: () =>
-            controller.isOpen ? controller.close() : controller.open(),
-        style: OutlinedButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          textStyle: Theme.of(context).textTheme.bodyMedium,
-        ),
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () => onChanged(!value),
+      borderRadius: BorderRadius.circular(SlabRadii.control),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Flexible(
-              child: Text(_summary(selected), overflow: TextOverflow.ellipsis),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              controller.isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down,
-              size: 20,
-              color: SlabColors.gold,
+            Checkbox(value: value, onChanged: (on) => onChanged(on ?? false)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      label,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: value ? SlabColors.cream : SlabColors.sage,
+                      ),
+                    ),
+                  ),
+                  if (description case final description?)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        description,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
       ),
     );
   }
-
-  /// What the closed button says. One rule names itself; several would not fit
-  /// on the button, and the legend below spells the combination out anyway.
-  static String _summary(List<Lens> selected) => switch (selected.length) {
-    0 => 'Nothing highlighted',
-    1 => selected.single.label,
-    final n => '$n rules',
-  };
 }
 
-class _Label extends StatelessWidget {
-  const _Label(this.text);
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
 
   final String text;
 
   @override
   Widget build(BuildContext context) =>
       Text(text.toUpperCase(), style: Theme.of(context).textTheme.labelSmall);
+}
+
+class _SectionHint extends StatelessWidget {
+  const _SectionHint(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 4, bottom: 6),
+    child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+  );
 }

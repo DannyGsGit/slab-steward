@@ -422,7 +422,7 @@ void main() {
       () async {
         // The spec's central rule: an OSM way modify replaces the element
         // wholesale, so anything left out of the payload is deleted. See
-        // docs/slab-steward-osm-changeset-spec.md §2.
+        // docs/specs/slab-steward-osm-changeset-spec.md §2.
         final sent = <String, String>{};
         final state = StewardState(
           osmApi: OsmApi(
@@ -522,7 +522,7 @@ void main() {
           _trail(tags: {'electric_bicycle': 'destination'}),
           EbikeAccess.allowed,
         );
-        expect(edit.summary, 'destination → Allowed');
+        expect(edit.summary, 'destination → Allowed up to Pedelec');
         expect(edit.tagChanges, {'electric_bicycle': 'yes'});
       },
     );
@@ -545,7 +545,6 @@ void main() {
               listenable: state,
               builder: (context, _) => Stack(
                 children: [
-                  StagedChangesButton(state: state),
                   Align(
                     alignment: Alignment.topRight,
                     child: TrailPanel(state: state),
@@ -582,11 +581,9 @@ void main() {
       expect(state.stagedEditFor(42, TrailAttribute.difficulty)?.tagChanges, {
         'mtb:scale:imba': '2',
       });
-      // The panel shows the pending value, flagged as pending, and the map
-      // overlay picks up a count.
+      // The panel shows the pending value, flagged as pending.
       expect(find.text('STAGED'), findsOneWidget);
       expect(find.text('Was not rated'), findsOneWidget);
-      expect(find.text('Review 1 change'), findsOneWidget);
     });
 
     testWidgets('the undo beside the field walks the change back', (
@@ -674,7 +671,10 @@ void main() {
       expect(find.text('MISSING'), findsNWidgets(2));
       // An empty field carries no explanatory line: the picker's own
       // 'Not recorded' hint is the whole story until something is chosen.
-      expect(find.textContaining('Answer from the trailhead sign'), findsNothing);
+      expect(
+        find.textContaining('Answer from the trailhead sign'),
+        findsNothing,
+      );
 
       await tester.tap(find.byType(DropdownButton<EbikeAccess>));
       await tester.pumpAndSettle();
@@ -716,7 +716,7 @@ void main() {
     });
   });
 
-  group('StagedChangesDialog', () {
+  group('the staging pane and its gate', () {
     Future<StewardState> pumpDialog(
       WidgetTester tester, {
       OsmApi? osmApi,
@@ -738,7 +738,13 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(body: StagedChangesDialog(state: state)),
+          home: Scaffold(
+            // The sidebar is what rebuilds a pane when the state changes.
+            body: ListenableBuilder(
+              listenable: state,
+              builder: (context, _) => StagedChangesPanel(state: state),
+            ),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -777,11 +783,11 @@ void main() {
       // The checklist reports success but stays open — the rider closes it,
       // it doesn't vanish out from under them the moment checks pass.
       expect(find.text('All checks passed'), findsOneWidget);
-      expect(find.byType(StagedChangesDialog), findsOneWidget);
+      expect(find.byType(SubmissionGateDialog), findsOneWidget);
 
       await tester.tap(find.widgetWithText(FilledButton, 'Close'));
       await tester.pumpAndSettle();
-      expect(find.byType(StagedChangesDialog), findsNothing);
+      expect(find.byType(SubmissionGateDialog), findsNothing);
     });
 
     testWidgets('a generic comment fails the gate and stays staged', (
