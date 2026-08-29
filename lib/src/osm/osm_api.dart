@@ -130,6 +130,35 @@ class OsmApi {
     _checkOk(response, action: 'closing the changeset');
   }
 
+  /// The rider's own closed changesets tagged [hashtag], newest first — what
+  /// the stats pane sums to answer "what have I actually done through
+  /// Steward". Scoped to a hashtag rather than the rider's whole account:
+  /// someone who's mapped for years otherwise sees a stats view about a tool
+  /// they only just opened.
+  ///
+  /// Closed only — a changeset left open by a failed upload isn't finished
+  /// work, and shouldn't inflate a count the rider reads as an achievement.
+  /// One page: OSM caps this endpoint at 100 changesets per call, which is
+  /// far more than the summary this feeds needs.
+  Future<List<OsmChangeset>> fetchChangesets({
+    required int userId,
+    required String hashtag,
+    required String bearerToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/0.6/changesets.json').replace(
+      queryParameters: {
+        'user': '$userId',
+        'hashtag': hashtag,
+        'closed': 'true',
+      },
+    );
+    final response = await _authorized(bearerToken).get(uri);
+    _checkOk(response, action: 'reading your changesets');
+    final body = jsonDecode(response.body) as Map<String, Object?>;
+    final elements = (body['changesets'] as List).cast<Map<String, Object?>>();
+    return [for (final e in elements) OsmChangeset.fromJson(e)];
+  }
+
   http.Client _authorized(String bearerToken) =>
       _BearerClient(_client, bearerToken);
 
@@ -194,6 +223,35 @@ class OsmWay {
   /// The way's member nodes, in order. A changeset upload has to send these
   /// back verbatim — omitting even one turns a tag edit into a way truncation.
   final List<int> nodeIds;
+}
+
+/// One changeset from `/api/0.6/changesets.json` — just the fields the stats
+/// pane sums over, not the full changeset representation.
+class OsmChangeset {
+  const OsmChangeset({
+    required this.id,
+    required this.createdAt,
+    required this.changesCount,
+    this.comment,
+  });
+
+  final int id;
+  final DateTime createdAt;
+
+  /// How many elements this changeset touched.
+  final int changesCount;
+
+  final String? comment;
+
+  factory OsmChangeset.fromJson(Map<String, Object?> json) {
+    final tags = (json['tags'] as Map<String, Object?>?) ?? const {};
+    return OsmChangeset(
+      id: (json['id'] as num).toInt(),
+      createdAt: DateTime.parse(json['created_at'] as String),
+      changesCount: (json['changes_count'] as num?)?.toInt() ?? 0,
+      comment: tags['comment'] as String?,
+    );
+  }
 }
 
 class OsmApiException implements Exception {

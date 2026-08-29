@@ -10,6 +10,7 @@ import 'selection_panel.dart';
 import 'slab_chrome.dart';
 import 'slab_theme.dart';
 import 'staged_changes.dart';
+import 'stats_panel.dart';
 import 'trail_list_panel.dart';
 import 'trail_panel.dart';
 
@@ -128,6 +129,11 @@ class _Rail extends StatelessWidget {
               badgeCount: state.stagedEditCount,
             ),
             const Spacer(),
+            _RailButton(
+              state: state,
+              section: SidebarSection.stats,
+              icon: Icons.emoji_events_outlined,
+            ),
             _RailButton(
               state: state,
               section: SidebarSection.account,
@@ -288,6 +294,7 @@ class _Pane extends StatelessWidget {
       _ => SelectionPanel(state: state),
     },
     SidebarSection.staged => StagedChangesPanel(state: state),
+    SidebarSection.stats => StatsPanel(state: state),
     SidebarSection.account => AccountPanel(state: state),
   };
 }

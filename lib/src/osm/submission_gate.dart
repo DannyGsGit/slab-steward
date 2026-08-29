@@ -1,6 +1,7 @@
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../model/staged_edit.dart';
 import 'osm_api.dart';
@@ -407,8 +408,9 @@ class SubmissionGate extends ChangeNotifier {
     }
 
     try {
+      final packageInfo = await PackageInfo.fromPlatform();
       final tags = {
-        'created_by': 'SLAB Steward',
+        'created_by': 'SLAB Steward/${packageInfo.version}',
         'comment': finalComment,
         'hashtags': '#slabsteward',
         'host': 'https://slab-steward.web.app',

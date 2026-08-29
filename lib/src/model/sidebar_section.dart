@@ -19,6 +19,9 @@ enum SidebarSection {
   /// Edits waiting to go out as one changeset.
   staged('Staged changes', 'Review and submit your changes'),
 
+  /// What you've actually submitted through Steward, tallied up.
+  stats('Your stats', 'Trails you\'ve edited through Steward'),
+
   /// Who you are about to write to OpenStreetMap as.
   account('Account', 'Your OpenStreetMap account');
 

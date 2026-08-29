@@ -9,6 +9,7 @@ import '../model/electric_bicycle.dart';
 import '../model/lens.dart';
 import '../model/sidebar_section.dart';
 import '../model/staged_edit.dart';
+import '../model/steward_stats.dart';
 import '../map/otm_conventions.dart' show renderedTagKeys;
 import '../model/trail.dart';
 import '../model/trail_filters.dart';
@@ -123,6 +124,12 @@ class StewardState extends ChangeNotifier {
   /// Bumped per way whenever a read starts, so a slow response for a trail the
   /// rider has since dropped — or re-read — lands nowhere.
   final Map<int, int> _fetchTokens = {};
+
+  /// What the rider has done through Steward, or null before the first load —
+  /// distinct from "loaded and empty", which [StewardStats.isEmpty] answers.
+  StewardStats? _stats;
+  bool _isLoadingStats = false;
+  String? _statsError;
 
   /// The open sidebar pane, or null when the rail is collapsed to the map.
   SidebarSection? _activeSection = SidebarSection.map;
@@ -391,6 +398,51 @@ class StewardState extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  /// The hashtag Steward stamps on every changeset it opens — see
+  /// [SubmissionGate.submit]. Scoping stats to it is what keeps a rider's
+  /// years of other OSM history out of a view meant to show what they've done
+  /// *here*.
+  static const stewardHashtag = 'slabsteward';
+
+  StewardStats? get stats => _stats;
+  bool get isLoadingStats => _isLoadingStats;
+  String? get statsError => _statsError;
+
+  /// Fetches the rider's Steward changesets and summarises them, unless a
+  /// load is already in flight. Requires a signed-in rider — the stats pane
+  /// checks [OsmAuthState.isSignedIn] before ever calling this.
+  Future<void> loadStats() async {
+    final identity = auth.identity;
+    final token = auth.bearerToken;
+    if (identity == null || token == null || _isLoadingStats) return;
+
+    _isLoadingStats = true;
+    _statsError = null;
+    notifyListeners();
+    try {
+      final changesets = await _osmApi.fetchChangesets(
+        userId: identity.id,
+        hashtag: stewardHashtag,
+        bearerToken: token,
+      );
+      _stats = StewardStats.from(changesets);
+    } on OsmApiException catch (e) {
+      _statsError = e.message;
+    } finally {
+      _isLoadingStats = false;
+      notifyListeners();
+    }
+  }
+
+  /// Drops whatever stats were loaded — called on sign-out, so a pane left
+  /// open doesn't keep showing the last rider's numbers under a new name.
+  void clearStats() {
+    if (_stats == null && _statsError == null) return;
+    _stats = null;
+    _statsError = null;
+    notifyListeners();
   }
 
   /// Reads authoritative tags for every selected trail that still needs them,

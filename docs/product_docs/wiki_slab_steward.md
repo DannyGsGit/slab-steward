@@ -2,35 +2,6 @@
 
 Target page: `https://wiki.openstreetmap.org/wiki/SLAB_Steward`
 
-Everything below the rule is the page source, in wikitext, ready to paste into
-the wiki's "edit source" box. It follows the shape the other editor pages use
-(`{{Software}}` infobox + `{{Communication channels}}` + prose), modelled on
-[MapComplete](https://wiki.openstreetmap.org/wiki/MapComplete) and
-[Pic4Review](https://wiki.openstreetmap.org/wiki/Pic4Review) — the two closest
-neighbours, both browser-based question-style tag editors that don't touch
-geometry.
-
-## Note on organised editing
-
-Confirmed with OSM (August 2026) that SLAB Steward is **not** organised editing:
-individuals editing on their own initiative, no coordination, no assignments, no
-targets. The page says so explicitly rather than staying silent, because a tool
-that makes bulk attribute edits easy attracts the question anyway, and answering
-it up front is cheaper than answering it in a changeset thread later.
-
-Two consequences outside this file, neither of them acted on yet:
-
-- **`docs/slab-steward-osm-changeset-spec.md` §9-10 and the README's pre-flight
-  checklist both still list the OEG activity page and the two-week community
-  notice as blockers on the production flip.** They are not blockers any more.
-  Worth correcting so the checklist stays trustworthy — a checklist with one
-  known-stale item on it gets skimmed.
-- **The [[Automated Edits code of conduct]] material in the page is unaffected.**
-  That is a separate policy and it still applies: it is about whether objects are
-  reviewed individually, not about whether the activity is coordinated. The bulk
-  editor's per-object review, and the deliberate absence of lasso selection, are
-  what keep Steward on the right side of it. Keep both.
-
 ## Before publishing
 
 Placeholders are marked `TODO` in the source. The ones that need a real answer:
@@ -38,9 +9,6 @@ Placeholders are marked `TODO` in the source. The ones that need a real answer:
 - **`license`** — there is no `LICENSE` file in the repo. Pick one, or drop the
   parameter. The infobox treats an empty license as unknown, which reads worse
   than proprietary.
-- **`repo`** — `github.com/DannyGsGit/slab-steward` is currently private. Either
-  make it public or remove the parameter; a dead link on the infobox is the
-  first thing a reviewer clicks.
 - **`version` / `date`** — `pubspec.yaml` says `0.1.0+1`. Use whatever ships.
 - **`screenshot` / `logo`** — need uploading to the wiki first
   (Special:Upload), under a free license, then referenced by filename.

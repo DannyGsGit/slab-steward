@@ -50,7 +50,7 @@ It does raise the stakes on one thing the research doc flagged for the org-scope
 
 ## 3. Metadata Model — the Opinionated Layer
 
-This is the part worth getting right, because it's the whole value proposition: hide OSM's tagging complexity behind SLAB's existing difficulty iconography without silently lying about what's being written.
+This is the part "../product"worth getting right, because it's the whole value proposition: hide OSM's tagging complexity behind SLAB's existing difficulty iconography without silently lying about what's being written.
 
 ### 3.1 Difficulty
 

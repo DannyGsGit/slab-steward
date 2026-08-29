@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:slab_steward/src/model/difficulty.dart';
 import 'package:slab_steward/src/model/electric_bicycle.dart';
 import 'package:slab_steward/src/model/staged_edit.dart';
@@ -112,6 +113,14 @@ OsmApi _multiWayApi(Map<int, (int version, Map<String, String> tags)> ways) =>
     );
 
 void main() {
+  PackageInfo.setMockInitialValues(
+    appName: 'SLAB Steward',
+    packageName: 'com.example.slab_steward',
+    version: '0.1.0',
+    buildNumber: '1',
+    buildSignature: '',
+  );
+
   group('StagedEdit.difficulty', () {
     test('diffs the tag against what the trail actually has', () {
       final edit = StagedEdit.difficulty(_trail(), Difficulty.medium);
@@ -491,7 +500,7 @@ void main() {
         final create = sent.entries
             .firstWhere((e) => e.key.endsWith('/changeset/create'))
             .value;
-        expect(create, contains('k="created_by"'));
+        expect(create, contains('k="created_by" v="SLAB Steward/0.1.0"'));
         expect(create, contains('k="hashtags" v="#slabsteward"'));
         expect(create, contains('Rated from a ride #slabsteward'));
       },
