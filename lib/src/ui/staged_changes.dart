@@ -274,7 +274,6 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
                 setState(() => _requestReview = value),
             onSubmit: _runGate,
             onSignIn: _signIn,
-            onSignOut: () => widget.state.auth.signOut(),
             authError: _authError,
             state: widget.state,
           ),
@@ -626,7 +625,6 @@ class _SubmitSection extends StatelessWidget {
     required this.onRequestReviewChanged,
     required this.onSubmit,
     required this.onSignIn,
-    required this.onSignOut,
     required this.authError,
     required this.state,
   });
@@ -636,7 +634,6 @@ class _SubmitSection extends StatelessWidget {
   final ValueChanged<bool> onRequestReviewChanged;
   final VoidCallback onSubmit;
   final VoidCallback onSignIn;
-  final VoidCallback onSignOut;
   final String? authError;
   final StewardState state;
 
@@ -656,19 +653,19 @@ class _SubmitSection extends StatelessWidget {
             onSubmitted: (_) => onSubmit(),
             decoration: const InputDecoration(
               labelText: 'Describe your change',
-              hintText: 'e.g. Rated difficulty from a ride on 2026-08-21',
-              helperText: 'Required. Say what changed and why.',
+              hintText: 'e.g. Rated difficulty from a ride on <date>',
+              helperText: 'Required.',
               border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 4),
-          // Hashtag discipline on every changeset, single-trail ones included
-          // — product description §5. Appended automatically if missing.
-          Text(
-            'Submitted with #slabsteward so the OSM community can audit these '
-            'edits as a group.',
-            style: theme.textTheme.bodySmall,
-          ),
+          // const SizedBox(height: 4),
+          // // Hashtag discipline on every changeset, single-trail ones included
+          // // — product description §5. Appended automatically if missing.
+          // Text(
+          //   'Submitted with #slabsteward so the OSM community can audit these '
+          //   'edits as a group.',
+          //   style: theme.textTheme.bodySmall,
+          // ),
           const SizedBox(height: 4),
           InkWell(
             onTap: () => onRequestReviewChanged(!requestReview),
@@ -740,22 +737,9 @@ class _SubmitSection extends StatelessWidget {
                   ],
                 );
               }
-              return Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Signed in as ${auth.identity?.displayName} — '
-                      'submitting to $osmLabel.',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: onSignOut,
-                    child: const Text('Sign out'),
-                  ),
-                ],
-              );
+              // Signed in is the quiet case: the account button in the app
+              // bar already says who you are and offers sign out.
+              return const SizedBox.shrink();
             },
           ),
           const SizedBox(height: 4),

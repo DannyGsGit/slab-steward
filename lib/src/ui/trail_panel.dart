@@ -91,8 +91,9 @@ class TrailPanel extends StatelessWidget {
                 _Chip(
                   icon: Icons.done_all,
                   label:
-                      '$multiSelectModifier-click another trail to edit '
-                      'several at once',
+                      '$multiSelectModifier-click another trail — or '
+                      '$multiSelectModifier-drag a box — to edit several '
+                      'at once',
                 ),
                 const SizedBox(height: 12),
                 const Divider(height: 1),
@@ -280,6 +281,19 @@ class ElectricBicycleField extends StatelessWidget {
     final theme = Theme.of(context);
     final staged = _staged;
     final shown = _shown;
+    // What the current answer actually claims, in the same words the picker
+    // used to offer it: "allowed" and "e-bike trail" are a distinction that
+    // has to survive the menu closing. An empty field says nothing — the
+    // picker's own hint is the whole story there.
+    final note = switch ((shown, _isProtected)) {
+      (final access?, _) => access.description,
+      (null, true) =>
+        'OpenStreetMap already answers this with '
+            '“${trail.rawElectricBicycle}”, which says more than either '
+            'of Steward\'s options. Steward leaves it alone rather than '
+            'replacing it — change it in a full editor if it\'s wrong.',
+      _ => null,
+    };
 
     return Field(
       label: 'E-bike access',
@@ -331,19 +345,10 @@ class ElectricBicycleField extends StatelessWidget {
               style: theme.textTheme.bodySmall,
             ),
           ],
-          const SizedBox(height: 6),
-          // What the current answer actually claims, in the same words the
-          // picker used to offer it. "Allowed" and "e-bike trail" are a
-          // distinction that has to survive the menu closing.
-          Text(switch ((shown, _isProtected)) {
-            (final access?, _) => access.description,
-            (null, true) =>
-              'OpenStreetMap already answers this with '
-                  '“${trail.rawElectricBicycle}”, which says more than either '
-                  'of Steward\'s options. Steward leaves it alone rather than '
-                  'replacing it — change it in a full editor if it\'s wrong.',
-            _ => EbikeAccess.pickerNote,
-          }, style: theme.textTheme.bodySmall),
+          if (note != null) ...[
+            const SizedBox(height: 6),
+            Text(note, style: theme.textTheme.bodySmall),
+          ],
         ],
       ),
     );

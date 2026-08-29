@@ -139,7 +139,8 @@ class _SelectionPanelState extends State<SelectionPanel> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Text(
-                '$multiSelectModifier-click a trail to add or remove it.',
+                '$multiSelectModifier-click a trail to add or remove it, or\n'
+                '$multiSelectModifier-drag a box to add every trail it crosses.',
                 style: theme.textTheme.bodySmall,
               ),
             ),

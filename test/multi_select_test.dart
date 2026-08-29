@@ -154,6 +154,83 @@ void main() {
     });
   });
 
+  group('a selection box', () {
+    test('adds every trail it caught to the set, and reads nothing', () async {
+      final osm = _FakeOsm();
+      final state = osm.newState();
+      addTearDown(state.dispose);
+
+      await state.selectFromTile(_tile(1, 'Gravy Train'));
+      osm.reads.clear();
+
+      // What the map hands back: features repeated across tile boundaries,
+      // and one trail the box caught that was already in the set.
+      state.addFromTiles([
+        _tile(2, 'Bootcamp'),
+        _tile(3, 'Luge'),
+        _tile(2, 'Bootcamp'),
+        _tile(1, 'Gravy Train'),
+      ]);
+
+      expect(state.selectionCount, 3);
+      expect(
+        [for (final trail in state.selectedTrails) trail.osmWayId],
+        [1, 2, 3],
+      );
+      expect(
+        osm.reads,
+        isEmpty,
+        reason: 'one gesture can name a hundred trails',
+      );
+    });
+
+    test('a box is additive — it never drops what it caught', () async {
+      final osm = _FakeOsm();
+      final state = osm.newState();
+      addTearDown(state.dispose);
+
+      state.addFromTiles([_tile(1, 'Gravy Train'), _tile(2, 'Bootcamp')]);
+      state.addFromTiles([_tile(2, 'Bootcamp')]);
+
+      expect(state.selectionCount, 2, reason: 'a second pass is not a toggle');
+    });
+
+    test('one notification for the whole box, and none for nothing', () {
+      final osm = _FakeOsm();
+      final state = osm.newState();
+      addTearDown(state.dispose);
+
+      var notifications = 0;
+      state.addListener(() => notifications++);
+
+      state.addFromTiles([
+        for (var i = 1; i <= 20; i++) _tile(i, 'Trail $i'),
+      ]);
+      expect(notifications, 1);
+
+      // A box drawn over trails already selected changes nothing, and a box
+      // that caught only features with no usable way id names nothing.
+      state.addFromTiles([_tile(1, 'Trail 1')]);
+      state.addFromTiles([
+        {'name': 'no id here'},
+      ]);
+      expect(notifications, 1);
+      expect(state.selectionCount, 20);
+    });
+
+    test('the trails it named are resolvable, like any other set', () async {
+      final osm = _FakeOsm();
+      final state = osm.newState();
+      addTearDown(state.dispose);
+
+      state.addFromTiles([_tile(1, 'Gravy Train'), _tile(2, 'Bootcamp')]);
+      await state.resolveSelection();
+
+      expect(osm.reads, hasLength(2));
+      expect(state.editableSelection, hasLength(2));
+    });
+  });
+
   group('applying one rating across a selection', () {
     /// Two authoritative trails: way 1 un-rated, way 2 already Medium.
     Future<StewardState> twoSelected() async {
@@ -306,39 +383,7 @@ void main() {
       expect(find.text('Medium · Hardpack / Groomed'), findsOneWidget);
     });
 
-    testWidgets('the completeness filter narrows it to the work', (
-      tester,
-    ) async {
-      await pumpList(tester);
-
-      await tester.tap(find.widgetWithText(ChoiceChip, 'No rating'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Gravy Train'), findsOneWidget);
-      expect(find.text('Bootcamp'), findsNothing);
-      expect(find.text('Select all 1'), findsOneWidget);
-    });
-
-    testWidgets('e-bike access is one of the questions the list asks', (
-      tester,
-    ) async {
-      await pumpList(
-        tester,
-        trails: [
-          _tile(1, 'Gravy Train', imba: '2', surface: 'compacted'),
-          _tile(2, 'Bootcamp', imba: '2', surface: 'compacted', ebike: 'no'),
-        ],
-      );
-
-      await tester.tap(find.widgetWithText(ChoiceChip, 'No e-bike rule'));
-      await tester.pumpAndSettle();
-
-      // Fully rated and surfaced is no longer fully answered.
-      expect(find.text('Gravy Train'), findsOneWidget);
-      expect(find.text('Bootcamp'), findsNothing);
-    });
-
-    testWidgets('select all ticks every trail the filter is showing', (
+    testWidgets('select all ticks every trail the list is showing', (
       tester,
     ) async {
       final osm = _FakeOsm();

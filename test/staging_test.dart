@@ -200,6 +200,40 @@ void main() {
       expect(staged.badgePoint, [-122.0, closeTo(47.55, 1e-9)]);
     });
 
+    test('a badge shows both pending fields on one trail', () {
+      final state = StewardState();
+      final trail = Trail(
+        osmWayId: 42,
+        tags: const {'name': 'Gravy Train'},
+        isAuthoritative: true,
+        version: 7,
+        geometry: const [
+          [-122.0, 47.5],
+          [-122.0, 47.6],
+        ],
+      );
+      state.stageEdit(StagedEdit.difficulty(trail, Difficulty.medium));
+      state.stageEdit(
+        StagedEdit.electricBicycle(trail, EbikeAccess.notAllowed),
+      );
+      state.clearSelection();
+
+      final staged = state.stagedTrails.single;
+      expect(staged.difficulty, Difficulty.medium);
+      expect(staged.electricBicycle, EbikeAccess.notAllowed);
+    });
+
+    test('an e-bike edit alone still earns a badge', () {
+      final state = StewardState();
+      state.stageEdit(
+        StagedEdit.electricBicycle(_trail(), EbikeAccess.allowed),
+      );
+
+      final staged = state.stagedTrails.single;
+      expect(staged.difficulty, isNull);
+      expect(staged.electricBicycle, EbikeAccess.allowed);
+    });
+
     test('a trail staged before the API answered glows nowhere', () {
       final state = StewardState();
       // No geometry: the panel gates editing on authoritative tags, so this
@@ -637,7 +671,9 @@ void main() {
       // Difficulty, surface and e-bike access all count towards completeness,
       // so an untagged trail wears three badges, not two.
       expect(find.text('MISSING'), findsNWidgets(3));
-      expect(find.textContaining('Answer from the trailhead sign'), findsOne);
+      // An empty field carries no explanatory line: the picker's own
+      // 'Not recorded' hint is the whole story until something is chosen.
+      expect(find.textContaining('Answer from the trailhead sign'), findsNothing);
 
       await tester.tap(find.byType(DropdownButton<EbikeAccess>));
       await tester.pumpAndSettle();

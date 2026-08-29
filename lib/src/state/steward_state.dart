@@ -247,6 +247,28 @@ class StewardState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Adds every trail the map reported under a selection box to the working
+  /// set — ctrl/cmd-drag on the map.
+  ///
+  /// Additive, and never subtractive: the box is the same modified gesture as
+  /// the click it extends, and a rider sweeping across a network is assembling
+  /// a set rather than toggling each trail in it. A box that catches a trail
+  /// already selected leaves it selected.
+  ///
+  /// Deliberately does *not* read authoritative tags, for the reason
+  /// [setSelection] gives: one gesture can name a hundred trails, and
+  /// [resolveSelection] reads them at the point there is an edit to compose.
+  /// Tile features repeat across tile boundaries, so this dedupes by way id.
+  void addFromTiles(Iterable<Map<String, Object?>> tileProperties) {
+    var added = false;
+    for (final props in tileProperties) {
+      final trail = _rememberTile(props);
+      if (trail == null) continue;
+      added |= _selection.add(trail.osmWayId);
+    }
+    if (added) notifyListeners();
+  }
+
   /// Replaces the working set wholesale — "select all", "select none".
   ///
   /// Deliberately does *not* read authoritative tags. This is one click that

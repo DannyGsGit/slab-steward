@@ -15,47 +15,17 @@ import 'fields.dart';
 /// and cannot sanely do by clicking twelve lines on a map.
 ///
 /// The list is the viewport: it's re-read whenever the camera settles, and it
-/// inherits the travel-mode and lens filters the map is already applying.
-class TrailListPanel extends StatefulWidget {
+/// inherits the travel-mode and lens filters the map is already applying — it
+/// shows exactly what the map shows, and narrows nothing further on its own.
+class TrailListPanel extends StatelessWidget {
   const TrailListPanel({super.key, required this.state});
 
   final StewardState state;
 
   @override
-  State<TrailListPanel> createState() => _TrailListPanelState();
-}
-
-/// The completeness questions the list can be narrowed by — the lens
-/// vocabulary, asked of a list instead of a colour ramp.
-enum _ListFilter {
-  all('All'),
-  missingDifficulty('No rating'),
-  missingSurface('No surface'),
-  missingElectricBicycle('No e-bike rule');
-
-  const _ListFilter(this.label);
-
-  final String label;
-
-  bool matches(Trail trail) => switch (this) {
-    _ListFilter.all => true,
-    _ListFilter.missingDifficulty => !trail.hasDifficulty,
-    _ListFilter.missingSurface => trail.rawSurface == null,
-    _ListFilter.missingElectricBicycle => !trail.hasElectricBicycle,
-  };
-}
-
-class _TrailListPanelState extends State<TrailListPanel> {
-  _ListFilter _filter = _ListFilter.all;
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final state = widget.state;
-    final trails = [
-      for (final trail in state.visibleTrails)
-        if (_filter.matches(trail)) trail,
-    ];
+    final trails = state.visibleTrails;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -69,7 +39,7 @@ class _TrailListPanelState extends State<TrailListPanel> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
+              padding: const EdgeInsets.fromLTRB(20, 14, 12, 4),
               child: Row(
                 children: [
                   Expanded(
@@ -83,22 +53,6 @@ class _TrailListPanelState extends State<TrailListPanel> {
                     tooltip: 'Close the list',
                     onPressed: () => state.setTrailListOpen(false),
                   ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final filter in _ListFilter.values)
-                    ChoiceChip(
-                      label: Text(filter.label),
-                      selected: _filter == filter,
-                      visualDensity: VisualDensity.compact,
-                      onSelected: (_) => setState(() => _filter = filter),
-                    ),
                 ],
               ),
             ),
@@ -125,12 +79,12 @@ class _TrailListPanelState extends State<TrailListPanel> {
     if (trails.isEmpty) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        child: Text(switch ((widget.state.hasListedVisibleTrails, _filter)) {
-          (false, _) => 'Reading the map…',
-          (_, _ListFilter.all) =>
-            'No trails in view. Pan or zoom in until some appear.',
-          _ => 'Every trail in view already answers that question.',
-        }, style: theme.textTheme.bodyMedium),
+        child: Text(
+          state.hasListedVisibleTrails
+              ? 'No trails in view. Pan or zoom in until some appear.'
+              : 'Reading the map…',
+          style: theme.textTheme.bodyMedium,
+        ),
       );
     }
     return ListView.builder(
@@ -140,13 +94,13 @@ class _TrailListPanelState extends State<TrailListPanel> {
       itemBuilder: (context, i) => _TrailRow(
         key: ValueKey(trails[i].osmWayId),
         trail: trails[i],
-        state: widget.state,
+        state: state,
       ),
     );
   }
 }
 
-/// Tick every trail the filter is currently showing — the whole point of the
+/// Tick every trail the list is currently showing — the whole point of the
 /// list as a bulk-selection surface. Selections made elsewhere, or scrolled out
 /// of view, are left alone either way.
 class _SelectAllRow extends StatelessWidget {

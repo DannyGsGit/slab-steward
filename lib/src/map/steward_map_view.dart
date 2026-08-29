@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:maplibre/maplibre.dart';
 
 import '../model/difficulty.dart';
+import '../model/electric_bicycle.dart';
 import '../state/steward_state.dart';
 import 'otm_conventions.dart';
 import 'steward_style.dart';
@@ -34,6 +36,10 @@ class StewardMapView extends StatefulWidget {
 
 /// How far a press may travel and still count as the click MapLibre reports.
 const _clickSlop = 8.0;
+
+/// A `#rrggbb` from the OpenTrailMap conventions, as a Flutter colour.
+Color _opaque(String hex) =>
+    Color(int.parse(hex.substring(1), radix: 16) | 0xFF000000);
 
 class _StewardMapViewState extends State<StewardMapView> {
   MapController? _controller;
@@ -74,6 +80,23 @@ class _StewardMapViewState extends State<StewardMapView> {
   /// Read at press time rather than at click time: MapLibre reports the click
   /// afterwards, by which point the key may already be up.
   bool _pressAddsToSelection = false;
+
+  /// Where a modified press landed, for as long as it's down.
+  ///
+  /// Non-null is also what suspends the map's own drag gestures: the box is
+  /// drawn in screen space, and a map that panned or rotated under it would
+  /// hand back a different set of trails than the one the rider outlined.
+  Offset? _boxAnchor;
+
+  /// The opposite corner of that box, once the press has travelled far enough
+  /// to be a drag rather than a click. Null while it hasn't.
+  Offset? _boxCorner;
+
+  /// The box being dragged right now, if one is.
+  Rect? get _selectionBox => switch ((_boxAnchor, _boxCorner)) {
+    (final anchor?, final corner?) => Rect.fromPoints(anchor, corner),
+    _ => null,
+  };
 
   @override
   void initState() {
@@ -233,6 +256,36 @@ class _StewardMapViewState extends State<StewardMapView> {
     );
   }
 
+  /// Turns the box just dragged into a selection: every trail with any part
+  /// of it under the box joins the working set.
+  ///
+  /// MapLibre suppresses its own click after a drag, so the click path never
+  /// sees this gesture — and a modified press that never became a drag falls
+  /// through to it untouched.
+  void _finishBox() {
+    final box = _selectionBox;
+    _clearBox();
+    if (box == null) return;
+
+    final hits = _controller?.featuresInRect(
+      box,
+      layerIds: [pointerTargetLayerId],
+    );
+    // A box that caught nothing is a miss, not "clear everything" — the same
+    // reading a modified click on empty map gets.
+    if (hits == null || hits.isEmpty) return;
+    widget.state.addFromTiles([for (final hit in hits) hit.properties]);
+  }
+
+  /// Drops the box and gives the map its gestures back.
+  void _clearBox() {
+    if (_boxAnchor == null && _boxCorner == null) return;
+    setState(() {
+      _boxAnchor = null;
+      _boxCorner = null;
+    });
+  }
+
   void _onEvent(MapEvent event) {
     if (event is MapEventCameraIdle || event is MapEventIdle) {
       _refreshVisibleTrails();
@@ -293,6 +346,14 @@ class _StewardMapViewState extends State<StewardMapView> {
         final keyboard = HardwareKeyboard.instance;
         _pressAddsToSelection =
             keyboard.isControlPressed || keyboard.isMetaPressed;
+        // The map stops responding to drags for the whole of a modified
+        // press, not just once one turns into a box: MapLibre pans — and
+        // under ctrl rotates — off the browser's own listeners, so a rebuild
+        // that only landed after the first move would have let the map slide
+        // out from under the first few pixels of the box.
+        if (_pressAddsToSelection) {
+          setState(() => _boxAnchor = event.localPosition);
+        }
       },
       // A pan is not a click. MapLibre suppresses its own click after a drag
       // anyway; this keeps a stale press from outliving one that didn't.
@@ -301,12 +362,34 @@ class _StewardMapViewState extends State<StewardMapView> {
             when (event.localPosition - press).distance > _clickSlop) {
           _pressOnMap = null;
         }
+        // A modified press only becomes a box once it has travelled further
+        // than the click it would otherwise have been.
+        if (_boxAnchor case final anchor?) {
+          if (_boxCorner == null &&
+              (event.localPosition - anchor).distance <= _clickSlop) {
+            return;
+          }
+          setState(() => _boxCorner = event.localPosition);
+        }
       },
+      onPointerUp: (_) => _finishBox(),
       onPointerCancel: (_) {
         _pressOnMap = null;
         _pressAddsToSelection = false;
+        _clearBox();
       },
-      child: _buildMap(),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _buildMap(),
+          if (_selectionBox case final box?)
+            Positioned.fromRect(
+              rect: box,
+              // The press this is tracking belongs to the [Listener] above.
+              child: const IgnorePointer(child: _SelectionBox()),
+            ),
+        ],
+      ),
     );
   }
 
@@ -320,6 +403,12 @@ class _StewardMapViewState extends State<StewardMapView> {
         // itself is happy at continent scale, so let users zoom out that far.
         minZoom: 2,
         maxZoom: 20,
+        // Panning, rotating and tilting are all the same drag the selection
+        // box is made of, so they stand down while one is being drawn. See
+        // [_boxAnchor].
+        gestures: _boxAnchor == null
+            ? const MapGestures.all()
+            : const MapGestures.all(pan: false, rotate: false, pitch: false),
       ),
       onMapCreated: (controller) => _controller = controller,
       onStyleLoaded: (style) {
@@ -334,10 +423,11 @@ class _StewardMapViewState extends State<StewardMapView> {
       },
       onEvent: _onEvent,
       children: [
-        // The staged difficulty, drawn halfway along each glowing trail. A
-        // widget layer rather than a symbol layer: the glyph vocabulary is
-        // already a [DifficultyIcon], and the basemap sprite has no way to
-        // learn a green circle or a double black diamond.
+        // The staged difficulty and e-bike permission, drawn halfway along
+        // each glowing trail. A widget layer rather than a symbol layer: the
+        // glyph vocabulary is already a [DifficultyIcon] and an [EbikeIcon],
+        // and the basemap sprite has no way to learn a green circle, a double
+        // black diamond, or a struck-through e-bike.
         WidgetLayer(markers: _stagedBadges()),
         // OSM data and OSM US's tiles both have to be credited on screen.
         const SourceAttribution(alignment: Alignment.bottomRight),
@@ -349,34 +439,57 @@ class _StewardMapViewState extends State<StewardMapView> {
     );
   }
 
-  /// One badge per trail whose pending edit has a difficulty to show.
+  /// One badge per trail whose pending edits have something to show. A trail
+  /// can have both a difficulty and an e-bike permission pending, and they
+  /// share the one chip rather than fighting over the same midpoint.
   List<Marker> _stagedBadges() => [
     for (final trail in widget.state.stagedTrails)
-      if (trail.difficulty case final difficulty?)
+      if (trail.difficulty != null || trail.electricBicycle != null)
         if (trail.badgePoint case final point?)
           Marker(
             point: Geographic(lon: point[0], lat: point[1]),
-            size: _StagedBadge.sizeFor(difficulty),
-            child: _StagedBadge(difficulty),
+            size: _StagedBadge.sizeFor(
+              trail.difficulty,
+              trail.electricBicycle,
+            ),
+            child: _StagedBadge(trail.difficulty, trail.electricBicycle),
           ),
   ];
 }
 
-/// The pending difficulty as it reads on the map: the same signage glyph the
-/// panel shows, on a chip ringed in the glow's blue so it's legible against
-/// whatever the trail is crossing.
+/// The pending edits as they read on the map: the same signage glyph and
+/// e-bike glyph the panel shows, on a chip ringed in the glow's blue so
+/// they're legible against whatever the trail is crossing.
 class _StagedBadge extends StatelessWidget {
-  const _StagedBadge(this.difficulty);
+  const _StagedBadge(this.difficulty, this.electricBicycle);
 
-  final Difficulty difficulty;
+  /// Null when that attribute has nothing pending — at least one of the two
+  /// is always set, or the badge wouldn't have been built.
+  final Difficulty? difficulty;
+  final EbikeAccess? electricBicycle;
 
   static const _glyphSize = 13.0;
   static const _padding = 4.0;
 
-  static Size sizeFor(Difficulty difficulty) => Size(
-    DifficultyIcon.widthFor(difficulty, _glyphSize) + _padding * 2 + 3,
-    _glyphSize + _padding * 2 + 3,
-  );
+  /// The e-bike glyph is a square icon, so it's as wide as it is tall.
+  static const _ebikeSize = 14.0;
+
+  /// Between the two glyphs when a trail has both pending.
+  static const _gap = 4.0;
+
+  static Size sizeFor(Difficulty? difficulty, EbikeAccess? electricBicycle) {
+    var width = 0.0;
+    if (difficulty != null) {
+      width += DifficultyIcon.widthFor(difficulty, _glyphSize);
+    }
+    if (electricBicycle != null) {
+      width += (width > 0 ? _gap : 0) + _ebikeSize;
+    }
+    return Size(
+      width + _padding * 2 + 3,
+      math.max(_glyphSize, _ebikeSize) + _padding * 2 + 3,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -395,12 +508,40 @@ class _StagedBadge extends StatelessWidget {
             ),
           ],
         ),
-        child: DifficultyIcon(difficulty, size: _glyphSize),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (difficulty case final difficulty?)
+              DifficultyIcon(difficulty, size: _glyphSize),
+            if (difficulty != null && electricBicycle != null)
+              const SizedBox(width: _gap),
+            if (electricBicycle case final access?)
+              EbikeIcon(access, size: _ebikeSize),
+          ],
+        ),
       ),
     );
   }
 
-  static final Color _glowColor = Color(
-    int.parse(stagedEditColor.substring(1), radix: 16) | 0xFF000000,
+  static final Color _glowColor = _opaque(stagedEditColor);
+}
+
+/// The rubber band a ctrl/cmd-drag draws across the map.
+///
+/// In the same yellow the map highlights a selected trail with, so the box and
+/// what it will leave behind read as one gesture. Filled rather than outlined
+/// alone: the fill is what says the trails under it are what's being named.
+class _SelectionBox extends StatelessWidget {
+  const _SelectionBox();
+
+  static final Color _color = _opaque(selectionColor);
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: _color.withValues(alpha: 0.18),
+      border: Border.all(color: _color, width: 1.5),
+      borderRadius: BorderRadius.circular(2),
+    ),
   );
 }

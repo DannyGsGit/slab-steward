@@ -21,8 +21,10 @@ What works today:
   from the OSM API, and the panel shows difficulty, e-bike access and surface
   through SLAB's guided vocabulary rather than raw tag keys
 - Multi-select: ctrl-click (Windows/Linux) or cmd-click (macOS) builds a working
-  set of trails, and the panel becomes a bulk editor that applies one rating
-  and/or one e-bike permission across all of them
+  set of trails, and the same modifier *dragged* sweeps a selection box across
+  the map — every trail with any part of it under the box joins the set. The
+  panel becomes a bulk editor that applies one rating and/or one e-bike
+  permission across all of them
 - A trail list for the current viewport, filtered by the same completeness
   questions the lenses ask. Rows can be edited in place one at a time, or ticked
   — including "select all" over a filter — to feed the same bulk editor
@@ -46,9 +48,10 @@ few reads at a time, and reports what it skipped.
 **Where a batch does and doesn't read OSM.** Picking trails one at a time — a
 click, a modified click, a single checkbox — reads that trail immediately, so
 the panel has something to show and the map has geometry to highlight. "Select
-all" deliberately reads nothing: it's one click that can name a hundred trails,
-and a hundred OSM API calls is not a reasonable answer to it. Those reads happen
-at the point there's actually an edit to compose.
+all" and the selection box deliberately read nothing: they're one gesture that
+can name a hundred trails, and a hundred OSM API calls is not a reasonable
+answer to it. Those reads happen at the point there's actually an edit to
+compose.
 
 A batch produces **one staged edit per trail**, never one opaque batch entry —
 the review sheet lists, explains and prunes each one on its own.
@@ -300,6 +303,16 @@ afterwards, by which point the key may already be up.
 arrives as `contextmenu`, never as a click, so the additive modifier has to be
 cmd. [fields.dart](lib/src/ui/fields.dart) picks the label off the platform for
 the same reason.
+
+**The map has to be told to hold still for a selection box.** The box is drawn
+in screen space and resolved with `featuresInRect` at the end of the drag, so a
+map that panned under it would hand back a different set of trails than the one
+outlined — and the very same drag is what MapLibre pans (and, under ctrl,
+rotates) with, off its own DOM listeners. So a *modified* press stands those
+gestures down for as long as it's held, via `MapOptions.gestures`, and gives
+them back on release. That happens at press time rather than once the drag
+passes the click threshold: a rebuild landing after the first move would already
+have let the map slide.
 
 ## Firebase Hosting wiring
 

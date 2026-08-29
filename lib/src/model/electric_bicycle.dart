@@ -57,11 +57,6 @@ enum EbikeAccess {
   /// reason the difficulty picker leaves out "un-rated".
   static List<EbikeAccess> get selectable => values;
 
-  /// What to say while the field is still empty.
-  static const pickerNote =
-      'Answer from the trailhead sign or the land manager\'s rules — not from '
-      'what riders do.';
-
   /// Resolves a raw OSM `electric_bicycle` value to a SLAB option.
   ///
   /// Returns null for everything else in the access vocabulary —
@@ -81,27 +76,83 @@ enum EbikeAccess {
 
 /// The glyph for an e-bike permission: the same allowed / not-allowed reading
 /// a rider gets off a sign, in the one place the picker shows a value.
+///
+/// A lightning bolt rather than a bicycle, because the key is about the motor
+/// and not the bike — and because at 14px beside a difficulty glyph a bolt
+/// still reads as a bolt where a bicycle turns to mush. "Not allowed" wears
+/// the signage slash over it, so the two options differ in shape and not in
+/// colour alone.
 class EbikeIcon extends StatelessWidget {
   const EbikeIcon(this.access, {super.key, this.size = 16});
 
-  /// Null draws the "not recorded" outline.
+  /// Null draws the bolt in the muted body colour: nothing recorded yet, so
+  /// neither the green nor the red claim is being made.
   final EbikeAccess? access;
   final double size;
 
+  static const _allowedColor = Color(0xFF2E9E4F);
+  static const _notAllowedColor = Color(0xFFB3261E);
+
   @override
   Widget build(BuildContext context) {
-    final (icon, color) = switch (access) {
-      EbikeAccess.allowed => (Icons.electric_bike, const Color(0xFF2E9E4F)),
-      EbikeAccess.notAllowed => (
-        Icons.do_not_disturb_on_outlined,
-        const Color(0xFFB3261E),
-      ),
-      null => (Icons.electric_bike_outlined, null),
+    final color = switch (access) {
+      EbikeAccess.allowed => _allowedColor,
+      EbikeAccess.notAllowed => _notAllowedColor,
+      null => Theme.of(context).textTheme.bodySmall?.color ?? Colors.black54,
     };
-    return Icon(
-      icon,
-      size: size,
-      color: color ?? Theme.of(context).textTheme.bodySmall?.color,
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            Icons.bolt,
+            size: size,
+            color: color,
+          ),
+          if (access == EbikeAccess.notAllowed)
+            CustomPaint(
+              size: Size.square(size),
+              painter: _SlashPainter(_notAllowedColor),
+            ),
+        ],
+      ),
     );
   }
+}
+
+/// The prohibition slash, top-left to bottom-right the way signage draws it.
+///
+/// Painted twice: a white line underneath so the slash stays visible where it
+/// crosses the bolt, and the red one on top of that.
+class _SlashPainter extends CustomPainter {
+  _SlashPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final start = Offset(size.width * 0.16, size.height * 0.16);
+    final end = Offset(size.width * 0.84, size.height * 0.84);
+    canvas.drawLine(
+      start,
+      end,
+      Paint()
+        ..color = Colors.white
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = size.shortestSide * 0.19,
+    );
+    canvas.drawLine(
+      start,
+      end,
+      Paint()
+        ..color = color
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = size.shortestSide * 0.11,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SlashPainter oldDelegate) => oldDelegate.color != color;
 }

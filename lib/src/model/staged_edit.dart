@@ -156,7 +156,8 @@ class StagedEdit {
 }
 
 /// Every pending edit to one trail, plus what the map needs to draw it: the
-/// glow follows [geometry], and the badge shows [difficulty].
+/// glow follows [geometry], and the badge shows [difficulty] and
+/// [electricBicycle].
 class StagedTrail {
   const StagedTrail({required this.osmWayId, required this.edits});
 
@@ -217,6 +218,17 @@ class StagedTrail {
   Difficulty? get difficulty {
     for (final edit in edits) {
       if (edit.attribute == TrailAttribute.difficulty) return edit.difficulty;
+    }
+    return null;
+  }
+
+  /// The pending e-bike permission, when one is among the staged edits. The
+  /// map badge draws it beside [difficulty] — a trail can have both pending.
+  EbikeAccess? get electricBicycle {
+    for (final edit in edits) {
+      if (edit.attribute == TrailAttribute.electricBicycle) {
+        return edit.electricBicycle;
+      }
     }
     return null;
   }

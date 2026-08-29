@@ -266,8 +266,9 @@ verifiability, and they belong in a separate store.
   completeness ("missing difficulty", "missing surface", "missing e-bike
   access", "missing any").
 # '''Select.''' Click a trail, or ctrl-click (cmd-click on macOS) to build up a
-  working set. A list of every trail in the current viewport can also be ticked
-  through, including "select all" over a filter.
+  working set — ctrl/cmd-''drag'' sweeps a box across the map and adds every
+  trail any part of it crosses. A list of every trail in the current viewport
+  can also be ticked through, including "select all" over a filter.
 # '''Edit.''' A guided picker per attribute, always live: choosing a value
   stages it, and an undo beside the field walks it back. Changes are
   ''staged'', not sent — they accumulate behind a counter and nothing has
