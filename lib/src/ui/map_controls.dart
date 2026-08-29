@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../model/lens.dart';
 import '../state/steward_state.dart';
+import 'slab_theme.dart';
 
 /// Travel mode and lens pickers — what's drawn, and what questions the colours
 /// are answering. Both concepts are OpenTrailMap's.
@@ -50,10 +51,11 @@ class _MapControlsState extends State<MapControls> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const _Label('Map controls'),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     Icon(
                       _expanded ? Icons.expand_less : Icons.expand_more,
                       size: 18,
+                      color: SlabColors.gold,
                     ),
                   ],
                 ),
@@ -65,7 +67,6 @@ class _MapControlsState extends State<MapControls> {
               const SizedBox(height: 6),
               SegmentedButton<TravelMode>(
                 showSelectedIcon: false,
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
                 segments: [
                   for (final mode in TravelMode.values)
                     ButtonSegment(value: mode, label: Text(mode.label)),
@@ -141,6 +142,7 @@ class _LensMenu extends StatelessWidget {
             Icon(
               controller.isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down,
               size: 20,
+              color: SlabColors.gold,
             ),
           ],
         ),
@@ -163,8 +165,6 @@ class _Label extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Text(
-    text.toUpperCase(),
-    style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 0.8),
-  );
+  Widget build(BuildContext context) =>
+      Text(text.toUpperCase(), style: Theme.of(context).textTheme.labelSmall);
 }

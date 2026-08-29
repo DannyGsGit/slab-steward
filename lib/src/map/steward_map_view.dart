@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:maplibre/maplibre.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import '../model/difficulty.dart';
 import '../model/electric_bicycle.dart';
 import '../state/steward_state.dart';
+import '../ui/slab_theme.dart';
 import 'otm_conventions.dart';
 import 'steward_style.dart';
 
@@ -431,10 +433,7 @@ class _StewardMapViewState extends State<StewardMapView> {
         WidgetLayer(markers: _stagedBadges()),
         // OSM data and OSM US's tiles both have to be credited on screen.
         const SourceAttribution(alignment: Alignment.bottomRight),
-        const MapControlButtons(
-          alignment: Alignment.bottomRight,
-          padding: EdgeInsets.only(right: 12, bottom: 44),
-        ),
+        const _ZoomButtons(),
       ],
     );
   }
@@ -460,6 +459,10 @@ class _StewardMapViewState extends State<StewardMapView> {
 /// The pending edits as they read on the map: the same signage glyph and
 /// e-bike glyph the panel shows, on a chip ringed in the glow's blue so
 /// they're legible against whatever the trail is crossing.
+///
+/// Ink rather than white — this is chrome, and SLAB's chrome is dark whatever
+/// the basemap under it is doing. The signage chips carry their own gold
+/// outline, so they read against it the way they read on a trail sign.
 class _StagedBadge extends StatelessWidget {
   const _StagedBadge(this.difficulty, this.electricBicycle);
 
@@ -479,9 +482,7 @@ class _StagedBadge extends StatelessWidget {
 
   static Size sizeFor(Difficulty? difficulty, EbikeAccess? electricBicycle) {
     var width = 0.0;
-    if (difficulty != null) {
-      width += DifficultyIcon.widthFor(difficulty, _glyphSize);
-    }
+    if (difficulty != null) width += _glyphSize;
     if (electricBicycle != null) {
       width += (width > 0 ? _gap : 0) + _ebikeSize;
     }
@@ -497,13 +498,13 @@ class _StagedBadge extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(_padding),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(5),
+          color: SlabColors.ink900,
+          borderRadius: BorderRadius.circular(6),
           border: Border.all(color: _glowColor, width: 1.5),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x33000000),
-              blurRadius: 3,
+              color: Color(0x59000000),
+              blurRadius: 4,
               offset: Offset(0, 1),
             ),
           ],
@@ -544,4 +545,88 @@ class _SelectionBox extends StatelessWidget {
       borderRadius: BorderRadius.circular(2),
     ),
   );
+}
+
+/// Zoom in and out, in SLAB's own hand.
+///
+/// The plugin's [MapControlButtons] is a pair of full-size floating action
+/// buttons, which the package itself suggests copying and adjusting rather
+/// than fighting. Steward wants them half that size and wearing the gold the
+/// rest of the chrome spends on "press this" — the map is the thing on
+/// screen, and its controls shouldn't outweigh a panel.
+class _ZoomButtons extends StatelessWidget {
+  const _ZoomButtons();
+
+  /// Half of a [FloatingActionButton]'s 56.
+  static const _size = 28.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = MapController.maybeOf(context);
+    if (controller == null) return const SizedBox.shrink();
+
+    void zoomBy(double delta) => controller.animateCamera(
+      zoom: controller.getCamera().zoom + delta,
+      nativeDuration: const Duration(milliseconds: 200),
+    );
+
+    return SafeArea(
+      child: Container(
+        alignment: Alignment.bottomRight,
+        padding: const EdgeInsets.only(right: 12, bottom: 44),
+        // The map underneath would otherwise swallow the taps on web.
+        child: PointerInterceptor(
+          child: Column(
+            spacing: 8,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ZoomButton(
+                icon: Icons.add,
+                tooltip: 'Zoom in',
+                onPressed: () => zoomBy(1),
+              ),
+              _ZoomButton(
+                icon: Icons.remove,
+                tooltip: 'Zoom out',
+                onPressed: () => zoomBy(-1),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ZoomButton extends StatelessWidget {
+  const _ZoomButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: SlabColors.gold,
+        borderRadius: BorderRadius.circular(SlabRadii.control),
+        clipBehavior: Clip.antiAlias,
+        elevation: 4,
+        shadowColor: const Color(0xB3000000),
+        child: InkWell(
+          onTap: onPressed,
+          child: SizedBox.square(
+            dimension: _ZoomButtons._size,
+            child: Icon(icon, size: 16, color: SlabColors.onGold),
+          ),
+        ),
+      ),
+    );
+  }
 }

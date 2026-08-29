@@ -7,6 +7,8 @@ import '../model/staged_edit.dart';
 import '../model/trail.dart';
 import '../state/steward_state.dart';
 import 'fields.dart';
+import 'slab_chrome.dart';
+import 'slab_theme.dart';
 
 /// Details for the selected trail, and the guided editor for the attributes
 /// Steward can change.
@@ -38,77 +40,90 @@ class TrailPanel extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
         width: 340,
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 12, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        trail.name ?? 'Unnamed trail',
-                        style: theme.textTheme.titleMedium,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      tooltip: 'Clear selection',
-                      onPressed: state.clearSelection,
-                    ),
-                  ],
-                ),
-                _SourceLine(trail: trail, state: state),
-                const SizedBox(height: 16),
-                DifficultyField(trail: trail, state: state),
-                const SizedBox(height: 12),
-                ElectricBicycleField(trail: trail, state: state),
-                const SizedBox(height: 12),
-                _SurfaceRow(trail: trail),
-                if (trail.isInformal) ...[
-                  const SizedBox(height: 12),
-                  const _Chip(
-                    icon: Icons.report_gmailerrorred_outlined,
-                    label: 'Tagged informal in OpenStreetMap',
-                  ),
-                ],
-                if (error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    error,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                // The additive gesture is invisible until someone tells you
-                // about it, and this panel is where a rider already is when
-                // the thought "I want to do this to the next one too" occurs.
-                _Chip(
-                  icon: Icons.done_all,
-                  label:
-                      '$multiSelectModifier-click another trail — or '
-                      '$multiSelectModifier-drag a box — to edit several '
-                      'at once',
-                ),
-                const SizedBox(height: 12),
-                const Divider(height: 1),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    icon: const Icon(Icons.open_in_new, size: 16),
-                    label: Text('Way ${trail.osmWayId} on osm.org'),
-                    onPressed: () => launchUrl(Uri.parse(trail.osmUrl)),
-                  ),
-                ),
-              ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PanelHeader(
+              title: trail.name ?? 'Unnamed trail',
+              closeTooltip: 'Clear selection',
+              onClose: state.clearSelection,
             ),
-          ),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _SourceLine(trail: trail, state: state),
+                      const SizedBox(height: 16),
+                      DifficultyField(trail: trail, state: state),
+                      const SizedBox(height: 14),
+                      ElectricBicycleField(trail: trail, state: state),
+                      if (trail.isInformal) ...[
+                        const SizedBox(height: 14),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: SlabTag(
+                            icon: Icons.report_gmailerrorred_outlined,
+                            label: 'Tagged informal in OpenStreetMap',
+                          ),
+                        ),
+                      ],
+                      if (error != null) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          error,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      // The additive gesture is invisible until someone tells
+                      // you about it, and this panel is where a rider already
+                      // is when the thought "I want to do this to the next one
+                      // too" occurs.
+                      SlabSurface(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.done_all,
+                              size: 15,
+                              color: SlabColors.gold,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '$multiSelectModifier-click another trail — '
+                                'or $multiSelectModifier-drag a box — to edit '
+                                'several at once',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Divider(height: 1),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          icon: const Icon(Icons.open_in_new, size: 15),
+                          label: Text('Way ${trail.osmWayId} on osm.org'),
+                          onPressed: () => launchUrl(Uri.parse(trail.osmUrl)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -372,46 +387,4 @@ class _WhileReading extends StatelessWidget {
           message: 'Waiting for the latest tags from OpenStreetMap',
           child: child,
         );
-}
-
-class _SurfaceRow extends StatelessWidget {
-  const _SurfaceRow({required this.trail});
-
-  final Trail trail;
-
-  @override
-  Widget build(BuildContext context) {
-    final surface = trail.surface;
-    final label = switch (surface) {
-      final s? => s.label,
-      // A real OSM value SLAB's picker can't express — show it plainly rather
-      // than calling it missing.
-      null when trail.hasUnmappedSurface => trail.rawSurface!,
-      _ => 'Not recorded yet',
-    };
-    return Field(
-      label: 'Surface',
-      isMissing: trail.rawSurface == null,
-      child: Text(label),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: theme.textTheme.bodySmall?.color),
-        const SizedBox(width: 6),
-        Expanded(child: Text(label, style: theme.textTheme.bodySmall)),
-      ],
-    );
-  }
 }

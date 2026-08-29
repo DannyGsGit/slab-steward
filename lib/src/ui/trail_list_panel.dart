@@ -5,6 +5,8 @@ import '../model/staged_edit.dart';
 import '../model/trail.dart';
 import '../state/steward_state.dart';
 import 'fields.dart';
+import 'slab_chrome.dart';
+import 'slab_theme.dart';
 
 /// Every trail the map is currently drawing, as a list.
 ///
@@ -38,23 +40,10 @@ class TrailListPanel extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 12, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Trails in view',
-                      style: theme.textTheme.titleMedium,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    tooltip: 'Close the list',
-                    onPressed: () => state.setTrailListOpen(false),
-                  ),
-                ],
-              ),
+            PanelHeader(
+              title: 'Trails in view',
+              closeTooltip: 'Close the list',
+              onClose: () => state.setTrailListOpen(false),
             ),
             const Divider(height: 1),
             _SelectAllRow(state: state, trails: trails),
@@ -131,8 +120,9 @@ class _SelectAllRow extends StatelessWidget {
 
     return InkWell(
       onTap: listed.isEmpty ? null : toggle,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 16, 4),
+      child: Container(
+        color: SlabColors.ink900,
+        padding: const EdgeInsets.fromLTRB(12, 6, 16, 6),
         child: Row(
           children: [
             Checkbox(
@@ -149,7 +139,10 @@ class _SelectAllRow extends StatelessWidget {
             if (state.selectionCount > 0)
               Text(
                 '${state.selectionCount} selected',
-                style: theme.textTheme.bodySmall,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: SlabColors.gold,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
           ],
         ),
@@ -209,12 +202,10 @@ class _TrailRowState extends State<_TrailRow> {
 
     return Container(
       decoration: BoxDecoration(
-        color: state.isSelected(trail.osmWayId)
-            ? theme.colorScheme.primary.withValues(alpha: 0.06)
-            : null,
-        border: Border(
-          bottom: BorderSide(color: theme.dividerColor.withValues(alpha: 0.4)),
-        ),
+        // A ticked row wears the gold wash the design system puts behind any
+        // active control.
+        color: state.isSelected(trail.osmWayId) ? SlabColors.goldSoft : null,
+        border: const Border(bottom: BorderSide(color: SlabColors.line)),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
@@ -237,7 +228,7 @@ class _TrailRowState extends State<_TrailRow> {
               ),
             const SizedBox(width: 4),
             SizedBox(
-              width: 150,
+              width: 158,
               child: DifficultyDropdown(
                 value: _shown,
                 hint: 'Rate it',
@@ -314,12 +305,15 @@ class TrailListButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final isOpen = state.isTrailListOpen;
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      color: isOpen ? theme.colorScheme.secondaryContainer : null,
+      color: isOpen ? SlabColors.goldSoft : null,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(SlabRadii.panel),
+        side: BorderSide(color: isOpen ? SlabColors.gold : SlabColors.line),
+      ),
       child: InkWell(
         onTap: state.toggleTrailList,
         child: Padding(
@@ -327,9 +321,19 @@ class TrailListButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.format_list_bulleted, size: 22),
+              Icon(
+                Icons.format_list_bulleted,
+                size: 20,
+                color: isOpen ? SlabColors.gold : SlabColors.sage,
+              ),
               const SizedBox(width: 12),
-              Text(isOpen ? 'Hide the trail list' : 'List trails in view'),
+              Text(
+                isOpen ? 'Hide the trail list' : 'List trails in view',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: isOpen ? SlabColors.gold : SlabColors.cream,
+                ),
+              ),
             ],
           ),
         ),

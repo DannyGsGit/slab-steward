@@ -6,6 +6,8 @@ import 'ui/account_button.dart';
 import 'ui/legend.dart';
 import 'ui/map_controls.dart';
 import 'ui/selection_panel.dart';
+import 'ui/slab_chrome.dart';
+import 'ui/slab_theme.dart';
 import 'ui/staged_changes.dart';
 import 'ui/trail_list_panel.dart';
 import 'ui/trail_panel.dart';
@@ -31,20 +33,12 @@ class _StewardAppState extends State<StewardApp> {
     return MaterialApp(
       title: 'SLAB Steward',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          // The OpenTrailMap trail brown, so the chrome and the map agree.
-          seedColor: const Color(0xFF4F2E28),
-        ),
-        // Near-white rather than the seed's tint: these cards sit on top of the
-        // map, and a coloured panel competes with the trail colours that
-        // actually carry meaning.
-        cardTheme: const CardThemeData(
-          elevation: 3,
-          color: Color(0xFFFDFBF8),
-          surfaceTintColor: Colors.transparent,
-        ),
-      ),
+      // SLAB's design system — dark forest and gold, from
+      // docs/SLAB Design System - Mockups v2.html. The chrome is dark on
+      // purpose: the map is the bright thing on screen and the panels are
+      // what surrounds it, exactly as the sister app treats its own map
+      // screen.
+      theme: slabTheme(),
       home: _HomePage(state: _state),
     );
   }
@@ -97,6 +91,8 @@ class _MapOverlays extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                const SlabBrand(),
+                const SizedBox(height: 12),
                 MapControls(state: state),
                 const SizedBox(height: 12),
                 TrailListButton(state: state),

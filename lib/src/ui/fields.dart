@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../model/difficulty.dart';
 import '../model/electric_bicycle.dart';
+import 'slab_theme.dart';
 
 /// The small shared vocabulary the editors are built from: a labelled row, the
 /// MISSING / STAGED markers, a compact icon button, and the guided pickers.
@@ -46,9 +47,7 @@ class Field extends StatelessWidget {
               Flexible(
                 child: Text(
                   label.toUpperCase(),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    letterSpacing: 0.8,
-                  ),
+                  style: theme.textTheme.labelSmall,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -72,17 +71,22 @@ class Field extends StatelessWidget {
   }
 }
 
-/// A one-word state marker. Missing borrows the map's "OSM doesn't know this"
-/// purple; staged borrows the Pro Line orange, the only other colour in the
-/// app that means "look here".
+/// A one-word state marker, in the design system's badge shape: a tinted pill
+/// carrying its own colour as text.
+///
+/// Both colours are the map's, lifted a few stops so they hold up as small
+/// text on the dark chrome. Missing is the "OSM doesn't know this" purple the
+/// map draws unspecified trails in; staged is the blue the map glows a trail
+/// with once something is pending on it. Neither is gold — gold is what you
+/// press, and a badge is not a button.
 class StatusBadge extends StatelessWidget {
   const StatusBadge._(this.label, this.color, {super.key});
 
   const StatusBadge.missing({Key? key})
-    : this._('MISSING', const Color(0xFF8A0092), key: key);
+    : this._('MISSING', const Color(0xFFDB6FE0), key: key);
 
   const StatusBadge.staged({Key? key})
-    : this._('STAGED', const Color(0xFFB35400), key: key);
+    : this._('STAGED', const Color(0xFF6FA8F0), key: key);
 
   final String label;
   final Color color;
@@ -90,17 +94,17 @@ class StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(4),
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(SlabRadii.pill),
       ),
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 10,
-          letterSpacing: 0.8,
-          fontWeight: FontWeight.w600,
+          fontSize: 9.5,
+          letterSpacing: 1,
+          fontWeight: FontWeight.w700,
           color: color,
         ),
       ),
@@ -173,7 +177,7 @@ class DifficultyDropdown extends StatelessWidget {
           PickerOption(
             difficulty,
             label: difficulty.label,
-            glyph: DifficultyIcon(difficulty, size: 14),
+            glyph: DifficultyIcon(difficulty, size: 17),
           ),
       ],
     );
@@ -208,7 +212,7 @@ class ElectricBicycleDropdown extends StatelessWidget {
           PickerOption(
             access,
             label: access.label,
-            glyph: EbikeIcon(access, size: 15),
+            glyph: EbikeIcon(access, size: 16),
             description: access.description,
           ),
       ],
@@ -273,14 +277,17 @@ class GuidedDropdown<T> extends StatelessWidget {
     return InputDecorator(
       decoration: const InputDecoration(
         isDense: true,
-        border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T>(
           value: value,
           isDense: true,
           isExpanded: true,
+          borderRadius: BorderRadius.circular(SlabRadii.card),
+          iconEnabledColor: SlabColors.gold,
+          iconDisabledColor: SlabColors.sageDim,
+          style: theme.textTheme.bodyMedium,
           itemHeight: described
               ? _describedItemHeight
               : kMinInteractiveDimension,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../osm/oauth_popup.dart' show OAuthPopupCancelled;
 import '../osm/osm_environment.dart';
 import '../state/steward_state.dart';
+import 'slab_theme.dart';
 
 /// Sign in to OpenStreetMap, and see who you're signed in as.
 ///
@@ -61,24 +62,14 @@ class _AccountButtonState extends State<AccountButton> {
                 ? auth.cancelSignIn
                 : _signIn,
             child: Padding(
-              padding: EdgeInsets.fromLTRB(14, 8, auth.isSignedIn ? 4 : 16, 8),
+              padding: EdgeInsets.fromLTRB(12, 8, auth.isSignedIn ? 4 : 16, 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: auth.isSigningIn
-                        ? const Padding(
-                            padding: EdgeInsets.all(3),
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Icon(
-                            auth.isSignedIn
-                                ? Icons.account_circle
-                                : Icons.login,
-                            size: 22,
-                          ),
+                  _Avatar(
+                    isSignedIn: auth.isSignedIn,
+                    isSigningIn: auth.isSigningIn,
+                    displayName: auth.identity?.displayName,
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -91,6 +82,7 @@ class _AccountButtonState extends State<AccountButton> {
                             : auth.isSigningIn
                             ? 'Signing in…'
                             : 'Sign in to OpenStreetMap',
+                        style: theme.textTheme.titleSmall,
                       ),
                       Text(
                         auth.isSigningIn
@@ -112,6 +104,73 @@ class _AccountButtonState extends State<AccountButton> {
             ),
           ),
         );
+      },
+    );
+  }
+}
+
+/// The design system's account avatar: a gold-ringed disc carrying the
+/// mapper's initials once there is a name to take them from.
+///
+/// Initials rather than a generic silhouette because this button answers
+/// "whose account am I about to write under" — and a face-shaped icon answers
+/// that with "somebody's".
+class _Avatar extends StatelessWidget {
+  const _Avatar({
+    required this.isSignedIn,
+    required this.isSigningIn,
+    required this.displayName,
+  });
+
+  final bool isSignedIn;
+  final bool isSigningIn;
+  final String? displayName;
+
+  /// At most two letters, from the first and last word of the name.
+  static String? _initials(String? name) {
+    final words = (name ?? '').trim().split(RegExp(r'[\s_.-]+'))
+      ..removeWhere((w) => w.isEmpty);
+    if (words.isEmpty) return null;
+    final letters = words.length == 1
+        ? words.first.substring(0, 1)
+        : '${words.first[0]}${words.last[0]}';
+    return letters.toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = isSignedIn ? _initials(displayName) : null;
+    return Container(
+      width: 32,
+      height: 32,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: SlabColors.goldSoft,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isSignedIn ? SlabColors.gold : SlabColors.line,
+          width: 1.5,
+        ),
+      ),
+      child: switch ((isSigningIn, initials)) {
+        (true, _) => const SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        (_, final initials?) => Text(
+          initials,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: SlabColors.gold,
+          ),
+        ),
+        _ => Icon(
+          isSignedIn ? Icons.person : Icons.login,
+          size: 16,
+          color: SlabColors.gold,
+        ),
       },
     );
   }

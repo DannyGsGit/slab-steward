@@ -20,9 +20,9 @@ Map<String, Object?> fakeBaseStyle() => {
   ],
 };
 
-/// The three attribute lenses together — what used to be the single fixed
+/// Both attribute lenses together — what used to be the single fixed
 /// "Missing any" lens, and what the app selects by default.
-const attributeLenses = {Lens.difficulty, Lens.surface, Lens.electricBicycle};
+const attributeLenses = {Lens.difficulty, Lens.electricBicycle};
 
 List<Map<String, Object?>> layersOf(Map<String, Object?> style) =>
     (style['layers'] as List).cast<Map<String, Object?>>();
@@ -144,7 +144,7 @@ void main() {
         'unspecified-paths',
       )!['filter'].toString();
       expect(filter, contains('mtb:scale:imba'));
-      expect(filter, contains('surface'));
+      expect(filter, contains('electric_bicycle'));
     });
   });
 

@@ -92,13 +92,9 @@ class StewardState extends ChangeNotifier {
 
   TravelMode _mode = TravelMode.mtb;
 
-  /// The lenses the map colours by. Defaults to the three attribute lenses —
-  /// the "is this trail finished?" question Steward exists to answer.
-  final Set<Lens> _lenses = {
-    Lens.difficulty,
-    Lens.surface,
-    Lens.electricBicycle,
-  };
+  /// The lenses the map colours by. Defaults to the attribute lenses — the
+  /// "is this trail finished?" question Steward exists to answer.
+  final Set<Lens> _lenses = {Lens.difficulty, Lens.electricBicycle};
 
   /// Every trail Steward has looked at this session, provisional or
   /// authoritative, keyed by OSM way id. Selection, the in-view list and the

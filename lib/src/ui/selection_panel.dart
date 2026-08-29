@@ -9,6 +9,7 @@ import '../model/staged_edit.dart';
 import '../model/trail.dart';
 import '../state/steward_state.dart';
 import 'fields.dart';
+import 'slab_chrome.dart';
 
 /// The bulk editor: one guided value per attribute, applied across every trail
 /// in the working set.
@@ -118,23 +119,10 @@ class _SelectionPanelState extends State<SelectionPanel> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${trails.length} trails selected',
-                      style: theme.textTheme.titleMedium,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    tooltip: 'Clear selection',
-                    onPressed: state.clearSelection,
-                  ),
-                ],
-              ),
+            PanelHeader(
+              title: '${trails.length} trails selected',
+              closeTooltip: 'Clear selection',
+              onClose: state.clearSelection,
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
@@ -209,14 +197,23 @@ class _SelectionPanelState extends State<SelectionPanel> {
           Text(access.description, style: theme.textTheme.bodySmall),
         ],
         const SizedBox(height: 12),
-        FilledButton.icon(
-          icon: const Icon(Icons.done_all, size: 18),
-          label: Text('Stage on ${trails.length} trails'),
-          onPressed: !_hasDraft || _isApplying ? null : _apply,
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            icon: const Icon(Icons.done_all, size: 17),
+            label: Text('Stage on ${trails.length} trails'),
+            onPressed: !_hasDraft || _isApplying ? null : _apply,
+          ),
         ),
         if (_progress case (final done, final total)) ...[
           const SizedBox(height: 10),
-          LinearProgressIndicator(value: total == 0 ? null : done / total),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              minHeight: 5,
+              value: total == 0 ? null : done / total,
+            ),
+          ),
           const SizedBox(height: 6),
           Text(
             'Reading $done of $total trails from OpenStreetMap…',
@@ -289,7 +286,7 @@ class _SelectedTrailRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
-          DifficultyIcon(shown, size: 14),
+          DifficultyIcon(shown, size: 17),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

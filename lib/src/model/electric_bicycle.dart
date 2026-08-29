@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../ui/slab_theme.dart';
+
 /// SLAB's e-bike permission picker and its mapping onto OSM
 /// `electric_bicycle=*`.
 ///
@@ -90,8 +92,10 @@ class EbikeIcon extends StatelessWidget {
   final EbikeAccess? access;
   final double size;
 
-  static const _allowedColor = Color(0xFF2E9E4F);
-  static const _notAllowedColor = Color(0xFFB3261E);
+  /// SLAB's own two: the green it paints an easy trail, and the one accent
+  /// the design system reserves for "no" — see `slab_theme.dart`.
+  static const _allowedColor = SlabColors.diffEasy;
+  static const _notAllowedColor = SlabColors.rust;
 
   @override
   Widget build(BuildContext context) {
@@ -124,8 +128,8 @@ class EbikeIcon extends StatelessWidget {
 
 /// The prohibition slash, top-left to bottom-right the way signage draws it.
 ///
-/// Painted twice: a white line underneath so the slash stays visible where it
-/// crosses the bolt, and the red one on top of that.
+/// Painted twice: an ink line underneath so the slash stays visible where it
+/// crosses the bolt, and the rust one on top of that.
 class _SlashPainter extends CustomPainter {
   _SlashPainter(this.color);
 
@@ -139,7 +143,7 @@ class _SlashPainter extends CustomPainter {
       start,
       end,
       Paint()
-        ..color = Colors.white
+        ..color = SlabColors.ink950
         ..strokeCap = StrokeCap.round
         ..strokeWidth = size.shortestSide * 0.19,
     );

@@ -7,6 +7,8 @@ import '../osm/oauth_popup.dart' show OAuthPopupCancelled;
 import '../osm/osm_environment.dart';
 import '../osm/submission_gate.dart';
 import '../state/steward_state.dart';
+import 'slab_chrome.dart';
+import 'slab_theme.dart';
 
 /// The map-level indicator that edits are waiting to be submitted.
 ///
@@ -23,6 +25,9 @@ class StagedChangesButton extends StatelessWidget {
     final count = state.stagedEditCount;
     if (count == 0) return const SizedBox.shrink();
 
+    // The panel's own ink, like every other card on the map — a gold-washed
+    // card sits so close to the gold text on it that the whole button
+    // disappears. The gold stays on the glyph and the label, where it reads.
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -37,11 +42,21 @@ class StagedChangesButton extends StatelessWidget {
                 count: count,
                 child: const Padding(
                   padding: EdgeInsets.only(right: 2, top: 2),
-                  child: Icon(Icons.edit_note, size: 24),
+                  child: Icon(
+                    Icons.edit_note,
+                    size: 22,
+                    color: SlabColors.gold,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
-              Text('Review ${_countLabel(count)}'),
+              Text(
+                'Review ${_countLabel(count)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: SlabColors.gold,
+                ),
+              ),
             ],
           ),
         ),
@@ -202,6 +217,10 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
             child: const Text('Keep them'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: SlabColors.rust,
+              foregroundColor: SlabColors.cream,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Discard all'),
           ),
@@ -243,23 +262,11 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 12, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Staged changes',
-                  style: theme.textTheme.titleLarge,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                tooltip: 'Close',
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
+        PanelHeader(
+          title: 'Staged changes',
+          large: true,
+          closeTooltip: 'Close',
+          onClose: () => Navigator.of(context).pop(),
         ),
         if (byTrail.isEmpty)
           const Padding(
@@ -331,23 +338,11 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 12, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Submission checks',
-                  style: theme.textTheme.titleLarge,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                tooltip: 'Close',
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
+        PanelHeader(
+          title: 'Submission checks',
+          large: true,
+          closeTooltip: 'Close',
+          onClose: () => Navigator.of(context).pop(),
         ),
         Flexible(
           child: ListView(
@@ -360,9 +355,9 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.check_circle,
-                      color: Colors.green.shade600,
+                      color: SlabColors.diffEasy,
                       size: 20,
                     ),
                     const SizedBox(width: 12),
@@ -386,8 +381,9 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
                               child: Text(
                                 url,
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.primary,
+                                  color: SlabColors.gold,
                                   decoration: TextDecoration.underline,
+                                  decorationColor: SlabColors.gold,
                                 ),
                               ),
                             ),
@@ -401,7 +397,7 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
               if (gate.checks.firstWhere((c) => c.id == 'comment').status ==
                   CheckStatus.failed) ...[
                 const SizedBox(height: 12),
-                FilledButton.tonal(
+                OutlinedButton(
                   onPressed: _backToReview,
                   child: const Text('Edit comment'),
                 ),
@@ -536,19 +532,19 @@ class _CheckRow extends StatelessWidget {
   }
 
   Widget _statusIcon(ThemeData theme, CheckStatus status) => switch (status) {
-    CheckStatus.open => Icon(
+    CheckStatus.open => const Icon(
       Icons.radio_button_unchecked,
       size: 20,
-      color: theme.disabledColor,
+      color: SlabColors.sageDim,
     ),
     CheckStatus.running => const Padding(
       padding: EdgeInsets.all(2),
       child: CircularProgressIndicator(strokeWidth: 2),
     ),
-    CheckStatus.passed => Icon(
+    CheckStatus.passed => const Icon(
       Icons.check_circle,
       size: 20,
-      color: Colors.green.shade600,
+      color: SlabColors.diffEasy,
     ),
     CheckStatus.failed => Icon(
       Icons.cancel,
@@ -574,14 +570,9 @@ class _ConflictRow extends StatelessWidget {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 10),
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: theme.colorScheme.error.withValues(alpha: 0.4),
-          ),
-          borderRadius: BorderRadius.circular(6),
-        ),
+      child: SlabSurface(
+        color: SlabColors.rustSoft,
+        borderColor: SlabColors.rust,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -713,7 +704,7 @@ class _SubmitSection extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        FilledButton.tonal(
+                        OutlinedButton(
                           onPressed: auth.isSigningIn ? null : onSignIn,
                           child: auth.isSigningIn
                               ? const SizedBox(
@@ -745,12 +736,15 @@ class _SubmitSection extends StatelessWidget {
           const SizedBox(height: 4),
           ListenableBuilder(
             listenable: Listenable.merge([comment, state.auth]),
-            builder: (context, _) => FilledButton.icon(
-              icon: const Icon(Icons.upload_outlined, size: 18),
-              label: Text('Submit ${_countLabel(state.stagedEditCount)}'),
-              onPressed: comment.text.trim().isEmpty || !state.auth.isSignedIn
-                  ? null
-                  : onSubmit,
+            builder: (context, _) => SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                icon: const Icon(Icons.upload_outlined, size: 17),
+                label: Text('Submit ${_countLabel(state.stagedEditCount)}'),
+                onPressed: comment.text.trim().isEmpty || !state.auth.isSignedIn
+                    ? null
+                    : onSubmit,
+              ),
             ),
           ),
         ],
@@ -818,7 +812,11 @@ class _EditRow extends StatelessWidget {
         children: [
           const Padding(
             padding: EdgeInsets.only(top: 3, right: 8),
-            child: Icon(Icons.subdirectory_arrow_right, size: 16),
+            child: Icon(
+              Icons.subdirectory_arrow_right,
+              size: 15,
+              color: SlabColors.sageDim,
+            ),
           ),
           Expanded(
             child: Column(

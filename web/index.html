@@ -19,10 +19,12 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Add trail difficulty and surface to OpenStreetMap.">
+  <!-- SLAB's Ink 900, so the browser chrome matches the app's own. -->
+  <meta name="theme-color" content="#12211C">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SLAB Steward">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
@@ -36,6 +38,12 @@
 
   <title>SLAB Steward</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- SLAB Ink 950 under everything, so the first paint before Flutter boots
+       is the app's own ground rather than a white flash. -->
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #0B1512; }
+  </style>
 </head>
 <body>
   <!--

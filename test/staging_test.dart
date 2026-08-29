@@ -648,8 +648,9 @@ void main() {
       expect(find.text('designated'), findsOneWidget);
       expect(find.textContaining('Steward leaves it alone'), findsOneWidget);
       expect(state.hasStagedEdits, isFalse);
-      // It counts as answered, so it isn't nagged about either.
-      expect(find.text('MISSING'), findsNWidgets(2));
+      // It counts as answered, so it isn't nagged about either — the rating
+      // is the only thing left unanswered here.
+      expect(find.text('MISSING'), findsOneWidget);
     });
 
     testWidgets('a rating outside the 0–4 scale renders, and says so', (
@@ -668,9 +669,9 @@ void main() {
     ) async {
       final state = await pumpSelected(tester, body: _wayJson({}));
 
-      // Difficulty, surface and e-bike access all count towards completeness,
-      // so an untagged trail wears three badges, not two.
-      expect(find.text('MISSING'), findsNWidgets(3));
+      // Difficulty and e-bike access both count towards completeness, so an
+      // untagged trail wears two badges, not one.
+      expect(find.text('MISSING'), findsNWidgets(2));
       // An empty field carries no explanatory line: the picker's own
       // 'Not recorded' hint is the whole story until something is chosen.
       expect(find.textContaining('Answer from the trailhead sign'), findsNothing);

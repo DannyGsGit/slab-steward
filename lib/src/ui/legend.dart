@@ -35,11 +35,13 @@ class Legend extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.fromLTRB(14, 11, 16, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            Text('Legend', style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 10),
             for (final entry in entries) ...[
               entry,
               if (entry != entries.last) const SizedBox(height: 8),
@@ -53,7 +55,7 @@ class Legend extends StatelessWidget {
   static Color _color(String hex) =>
       Color(int.parse(hex.substring(1), radix: 16) | 0xFF000000);
 
-  /// The selected lenses as prose: "difficulty, surface and e-bike rule".
+  /// The selected lenses as prose: "difficulty and e-bike rule".
   static String _list(List<Lens> lenses, String conjunction) {
     final nouns = [for (final lens in lenses) lens.noun];
     if (nouns.length == 1) return nouns.single;

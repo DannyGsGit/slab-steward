@@ -1,0 +1,63 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SLAB — Difficulty icons</title>
+<style>
+  :root{--gold:#C9A870;--slate:#0F2029;--muted:#7E949F}
+  body{margin:0;padding:40px 24px;background:#0C1A23;color:#EDF2F4;
+       font-family:-apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif}
+  h1{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);
+     font-weight:600;margin:0 0 28px}
+  h2{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+     font-weight:600;margin:44px 0 18px;padding-top:20px;border-top:1px solid rgba(255,255,255,.08)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:22px;max-width:820px}
+  .cell{background:var(--slate);border:1px solid rgba(255,255,255,.07);border-radius:14px;
+        padding:22px 10px 14px;text-align:center}
+  .cell img{width:52px;height:52px;display:block;margin:0 auto 14px}
+  .cell span{font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+  .sizes{display:flex;align-items:flex-end;gap:26px;flex-wrap:wrap;
+         background:var(--slate);border:1px solid rgba(255,255,255,.07);
+         border-radius:14px;padding:24px;max-width:820px}
+  .sizes figure{margin:0;text-align:center}
+  .sizes img{display:block;margin:0 auto 8px}
+  .sizes figcaption{font-size:9px;letter-spacing:1px;color:var(--muted)}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;max-width:820px}
+  .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 13px 6px 9px;
+        border-radius:99px;border:1px solid rgba(255,255,255,.12);background:var(--slate);
+        font-size:13px;font-weight:500}
+  .chip img{width:17px;height:17px}
+  .chip small{color:var(--muted);font-weight:400}
+</style>
+
+<h1>SLAB — trail difficulty marks</h1>
+
+<div class="grid">
+  <div class="cell"><img src="difficulty-beginner.svg" alt=""><span>Beginner</span></div>
+  <div class="cell"><img src="difficulty-easy.svg" alt=""><span>Easy</span></div>
+  <div class="cell"><img src="difficulty-medium.svg" alt=""><span>Medium</span></div>
+  <div class="cell"><img src="difficulty-difficult.svg" alt=""><span>Difficult</span></div>
+  <div class="cell"><img src="difficulty-expert.svg" alt=""><span>Expert</span></div>
+  <div class="cell"><img src="difficulty-pro-line.svg" alt=""><span>Pro line</span></div>
+  <div class="cell"><img src="difficulty-unrated.svg" alt=""><span>Un-rated</span></div>
+</div>
+
+<h2>Legibility at UI sizes</h2>
+<div class="sizes">
+  <figure><img src="difficulty-pro-line.svg" width="48" height="48"><figcaption>48 · legend</figcaption></figure>
+  <figure><img src="difficulty-pro-line.svg" width="32" height="32"><figcaption>32 · list row</figcaption></figure>
+  <figure><img src="difficulty-pro-line.svg" width="24" height="24"><figcaption>24 · map pin</figcaption></figure>
+  <figure><img src="difficulty-pro-line.svg" width="16" height="16"><figcaption>16 · chip</figcaption></figure>
+  <figure><img src="difficulty-difficult.svg" width="16" height="16"><figcaption>16 · chip</figcaption></figure>
+  <figure><img src="difficulty-expert.svg" width="16" height="16"><figcaption>16 · chip</figcaption></figure>
+  <figure><img src="difficulty-medium.svg" width="16" height="16"><figcaption>16 · chip</figcaption></figure>
+</div>
+
+<h2>In context — badge chips</h2>
+<div class="chips">
+  <span class="chip"><img src="difficulty-beginner.svg" alt="">Beginner <small>· IMBA 0</small></span>
+  <span class="chip"><img src="difficulty-easy.svg" alt="">Easy <small>· IMBA 1</small></span>
+  <span class="chip"><img src="difficulty-medium.svg" alt="">Medium <small>· IMBA 2</small></span>
+  <span class="chip"><img src="difficulty-difficult.svg" alt="">Difficult <small>· IMBA 3</small></span>
+  <span class="chip"><img src="difficulty-expert.svg" alt="">Expert <small>· IMBA 4</small></span>
+  <span class="chip"><img src="difficulty-pro-line.svg" alt="">Pro line <small>· IMBA 5+</small></span>
+  <span class="chip"><img src="difficulty-unrated.svg" alt="">Un-rated <small>· estimated</small></span>
+</div>

@@ -1,5 +1,5 @@
 name: slab_steward
-description: "A new Flutter project."
+description: "Rate trails and fill the gaps, straight into OpenStreetMap."
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -15,6 +15,7 @@ dependencies:
   pointer_interceptor: ^0.10.1+2
   url_launcher: ^6.3.2
   web: ^1.1.1
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -23,3 +24,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Copied from docs/slab_assets, which is the sister SLAB app's handoff
+  # folder. Copies rather than references so a bundled asset can't be lost by
+  # someone tidying the docs tree — re-copy from there when SLAB updates them.
+  assets:
+    - assets/slab/
+    - assets/slab/difficulty/

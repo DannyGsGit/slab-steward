@@ -431,6 +431,36 @@ Three things about it are easy to get wrong, and each has a test:
 The cache is persisted (browser local storage), because the complaint it
 answers is "I submitted it, refreshed, and it's still magenta".
 
+## Design system
+
+The chrome follows [SLAB's design system](docs/SLAB%20Design%20System%20-%20Mockups%20v2.html)
+— the sister app's mockups v2 — and its rule for a map screen: **the map is
+fixed, the chrome around it is ours**. Nothing in
+[otm_conventions.dart](lib/src/map/otm_conventions.dart) or the basemap changes
+for design reasons; panels, cards, buttons, pickers and badges are all dressed
+from [slab_theme.dart](lib/src/ui/slab_theme.dart).
+
+| Token | Value | Where it lands |
+|---|---|---|
+| Ink 950 | `#0B1512` | the page under everything, and the pre-boot background in `web/index.html` |
+| Ink 900 | `#12211C` | recessed rows, the chips drawn on the map |
+| Ink 800 | `#1B2C25` | every floating panel and dialog |
+| Ink 700 | `#24382F` | cards, inputs and secondary buttons *on* a panel |
+| Gold | `#C9A227` | the brand, the CTA, and any active control |
+| Cream / Sage / Sage-dim | `#F3EFE6` / `#93A69A` / `#5C6E62` | primary, secondary and tertiary text |
+| Rust | `#B5453A` | errors, and discarding staged work |
+
+Two colours stay tied to the map rather than the palette: the MISSING badge is
+the purple the map draws an unspecified trail in, and STAGED is the blue it
+glows a trail with once something is pending on it — both lifted a few stops so
+they hold up as small text on dark. Difficulty is never a colour swatch here:
+it is SLAB's own signage chip, loaded straight from
+`assets/slab/difficulty/*.svg` so both apps put the same glyph in front of a
+rider.
+
+Not yet used from the handoff folder: `regions.json` (Steward has no region
+picker) and `placeholder_trail_hero.jpg` (no hero surface).
+
 ## Layout
 
 ```
@@ -461,6 +491,8 @@ lib/
       steward_state.dart     ChangeNotifier: mode, lenses, the working set,
                              the in-view list, and staging
     ui/
+      slab_theme.dart        SLAB palette tokens and the app-wide ThemeData
+      slab_chrome.dart       brand lockup, panel headings, surfaces, tags
       fields.dart            labelled rows, status badges, difficulty picker
       map_controls.dart      travel mode picker and the multi-select lens menu
       legend.dart            what the colours mean
@@ -470,7 +502,15 @@ lib/
       staged_changes.dart    staged-changes badge and review sheet
       account_button.dart    OSM sign-in / who you're writing as
     steward_app.dart
+assets/
+  slab/
+    logo.png                 SLAB's mountain mark — brand lockup, web icons
+    difficulty/              the seven signage chips, one SVG per rating
 ```
+
+Both are copies of what SLAB ships in `docs/slab_assets`, which is the sister
+app's handoff folder — re-copy from there when the artwork changes, rather
+than redrawing it here.
 
 ## Next
 

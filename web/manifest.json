@@ -1,12 +1,12 @@
 {
-    "name": "slab_steward",
-    "short_name": "slab_steward",
+    "name": "SLAB Steward",
+    "short_name": "Steward",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#0B1512",
+    "theme_color": "#12211C",
+    "description": "Rate trails and fill the gaps, straight into OpenStreetMap.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

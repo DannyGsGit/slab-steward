@@ -1,0 +1,112 @@
+[
+  {
+    "slug": "washington",
+    "name": "Washington",
+    "center": {"lat": 47.27295, "lng": -121.826913},
+    "zoom": 6,
+    "bounds": {
+      "sw": {"lat": 45.53882, "lng": -124.85},
+      "ne": {"lat": 49.00708, "lng": -116.911526}
+    }
+  },
+  {
+    "slug": "oregon",
+    "name": "Oregon",
+    "center": {"lat": 44.1334449, "lng": -121.4212},
+    "zoom": 6,
+    "bounds": {
+      "sw": {"lat": 41.9634, "lng": -124.7},
+      "ne": {"lat": 46.3034899, "lng": -116.4545}
+    }
+  },
+  {
+    "slug": "idaho",
+    "name": "Idaho",
+    "center": {"lat": 45.4945, "lng": -114.1424},
+    "zoom": 6,
+    "bounds": {
+      "sw": {"lat": 41.9880, "lng": -117.2430},
+      "ne": {"lat": 49.0011, "lng": -111.0435}
+    }
+  },
+  {
+    "slug": "california",
+    "name": "California",
+    "center": {"lat": 37.1841, "lng": -119.4696},
+    "zoom": 5.5,
+    "bounds": {
+      "sw": {"lat": 32.5343, "lng": -124.4820},
+      "ne": {"lat": 42.0095, "lng": -114.1312}
+    }
+  },
+  {
+    "slug": "utah",
+    "name": "Utah",
+    "center": {"lat": 39.3055, "lng": -111.6703},
+    "zoom": 6,
+    "bounds": {
+      "sw": {"lat": 36.9979, "lng": -114.0529},
+      "ne": {"lat": 42.0016, "lng": -109.0415}
+    }
+  },
+  {
+    "slug": "arizona",
+    "name": "Arizona",
+    "center": {"lat": 34.2744, "lng": -111.6602},
+    "zoom": 6,
+    "bounds": {
+      "sw": {"lat": 31.3322, "lng": -114.8183},
+      "ne": {"lat": 37.0043, "lng": -109.0452}
+    }
+  },
+  {
+    "slug": "british_columbia",
+    "name": "British Columbia",
+    "center": {"lat": 54.7267, "lng": -124.7844},
+    "zoom": 5,
+    "bounds": {
+      "sw": {"lat": 48.2989, "lng": -139.06},
+      "ne": {"lat": 60.0, "lng": -114.03}
+    }
+  },
+  {
+    "slug": "us_virgin_islands",
+    "name": "U.S. Virgin Islands",
+    "center": {"lat": 17.8, "lng": -64.83},
+    "zoom": 10,
+    "bounds": {
+      "sw": {"lat": 17.62, "lng": -65.15},
+      "ne": {"lat": 18.44, "lng": -64.54}
+    }
+  },
+  {
+    "slug": "italy",
+    "name": "Italy",
+    "center": {"lat": 42.5039, "lng": 12.5736},
+    "zoom": 5,
+    "bounds": {
+      "sw": {"lat": 35.29, "lng": 6.60},
+      "ne": {"lat": 47.095, "lng": 18.79}
+    }
+  },
+  {
+    "slug": "spain",
+    "name": "Spain",
+    "center": {"lat": 40.0, "lng": -3.7},
+    "zoom": 5,
+    "bounds": {
+      "sw": {"lat": 27.60, "lng": -18.20},
+      "ne": {"lat": 43.79, "lng": 4.33}
+    }
+  },
+  {
+    "slug": "norway",
+    "name": "Norway",
+    "center": {"lat": 64.5, "lng": 12.0},
+    "zoom": 4.5,
+    "bounds": {
+      "sw": {"lat": 57.90, "lng": 4.09},
+      "ne": {"lat": 71.19, "lng": 31.29}
+    }
+  }
+]

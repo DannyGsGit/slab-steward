@@ -161,9 +161,9 @@ void main() {
       {},
       {Lens.access},
       {Lens.difficulty},
-      {Lens.difficulty, Lens.surface, Lens.electricBicycle},
+      {Lens.difficulty, Lens.electricBicycle},
       {Lens.access, Lens.difficulty},
-      {Lens.access, Lens.difficulty, Lens.surface, Lens.electricBicycle},
+      {Lens.access, Lens.difficulty, Lens.electricBicycle},
     ];
 
     for (final mode in TravelMode.values) {
@@ -320,28 +320,27 @@ void main() {
       );
     });
 
-    test('the three attribute lenses need every key, override or not', () {
+    test('the attribute lenses need every key, override or not', () {
       Set<String> withTags(Map<String, String> override) => layersDrawing(
         unrated(),
         mode: TravelMode.mtb,
-        lenses: {Lens.difficulty, Lens.surface, Lens.electricBicycle},
+        lenses: {Lens.difficulty, Lens.electricBicycle},
         tags: TagSource.overriding({100: override}),
       );
       expect(
         withTags({'highway': 'path', 'mtb:scale:imba': '4'}),
         {'unspecified-paths'},
-        reason: 'rated but still no surface',
+        reason: 'rated, but still silent about e-bikes',
       );
       expect(
-        withTags({'highway': 'path', 'mtb:scale:imba': '4', 'surface': 'dirt'}),
+        withTags({'highway': 'path', 'electric_bicycle': 'no'}),
         {'unspecified-paths'},
-        reason: 'rated and surfaced, but still silent about e-bikes',
+        reason: 'answered on e-bikes, but still unrated',
       );
       expect(
         withTags({
           'highway': 'path',
           'mtb:scale:imba': '4',
-          'surface': 'dirt',
           'electric_bicycle': 'no',
         }),
         {'paths'},

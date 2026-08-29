@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 /// SLAB's difficulty scale and its mapping onto OSM's `mtb:scale:imba`.
 ///
@@ -7,30 +8,30 @@ import 'package:flutter/material.dart';
 /// and the Pro Line distinction is preserved in Commons instead), and `unrated`
 /// writes nothing at all — absence of the tag *is* the un-rated state.
 enum Difficulty {
-  beginner('Beginner', 0, Color(0xFF7B4FA8), _Shape.circle, 1),
-  easy('Easy', 1, Color(0xFF2E9E4F), _Shape.circle, 1),
-  medium('Medium', 2, Color(0xFF2C6FBB), _Shape.square, 1),
-  difficult('Difficult', 3, Color(0xFF1A1A1A), _Shape.diamond, 1),
-  expert('Expert', 4, Color(0xFF1A1A1A), _Shape.diamond, 2),
-  proLine('Pro Line', 4, Color(0xFFE1701A), _Shape.diamond, 2),
-  unrated('Un-rated', null, Color(0xFFC8A02C), _Shape.ring, 1);
+  beginner('Beginner', 0, 'beginner'),
+  easy('Easy', 1, 'easy'),
+  medium('Medium', 2, 'medium'),
+  difficult('Difficult', 3, 'difficult'),
+  expert('Expert', 4, 'expert'),
+  proLine('Pro Line', 4, 'pro-line'),
+  unrated('Un-rated', null, 'unrated');
 
-  const Difficulty(
-    this.label,
-    this.imbaScale,
-    this.color,
-    this._shape,
-    this._count,
-  );
+  const Difficulty(this.label, this.imbaScale, this._asset);
 
   final String label;
 
   /// The `mtb:scale:imba` value this writes, or null to write no tag.
   final int? imbaScale;
 
-  final Color color;
-  final _Shape _shape;
-  final int _count;
+  final String _asset;
+
+  /// The signage chip SLAB ships for this rating, in `assets/slab`.
+  ///
+  /// Shared artwork rather than a shape Steward draws for itself: the two apps
+  /// have to put the same glyph in front of a rider, and a chip redrawn here
+  /// would be a second definition of the scale waiting to drift from the
+  /// first.
+  String get assetPath => 'assets/slab/difficulty/difficulty-$_asset.svg';
 
   /// The one OSM key this scale reads and writes. `mtb:scale` is a different
   /// scale for a different question — see the product description §3.1.
@@ -72,78 +73,27 @@ enum Difficulty {
   }
 }
 
-enum _Shape { circle, square, diamond, ring }
-
-/// The circle / square / diamond signage glyph for a difficulty.
+/// The circle / square / diamond signage chip for a difficulty, drawn from
+/// SLAB's own asset — see [Difficulty.assetPath].
+///
+/// Square whatever the rating: the doubled diamonds of Expert and Pro Line are
+/// composed inside the artwork's own 48×48 box, so callers reserving space for
+/// a glyph only ever need [size].
 class DifficultyIcon extends StatelessWidget {
   const DifficultyIcon(this.difficulty, {super.key, this.size = 18});
 
   final Difficulty difficulty;
   final double size;
 
-  /// How wide the glyph will draw at [size] — doubled diamonds overlap rather
-  /// than tile, so this isn't just `size * count`. Callers that have to
-  /// reserve space for the glyph (the map badge) need it up front.
-  static double widthFor(Difficulty difficulty, double size) =>
-      size * difficulty._count - (difficulty._count - 1) * size * 0.35;
-
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: widthFor(difficulty, size),
+    return SvgPicture.asset(
+      difficulty.assetPath,
+      width: size,
       height: size,
-      child: CustomPaint(painter: _GlyphPainter(difficulty)),
+      // The chips carry their own colours — the gold outline is part of the
+      // signage, not a tint the chrome gets to choose.
+      semanticsLabel: '${difficulty.label} trail',
     );
   }
-}
-
-class _GlyphPainter extends CustomPainter {
-  _GlyphPainter(this.difficulty);
-
-  final Difficulty difficulty;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final side = size.height;
-    // Doubled glyphs overlap slightly, the way trail signage prints them.
-    final step = side * 0.65;
-    for (var i = 0; i < difficulty._count; i++) {
-      _paintGlyph(canvas, Rect.fromLTWH(i * step, 0, side, side));
-    }
-  }
-
-  void _paintGlyph(Canvas canvas, Rect r) {
-    final fill = Paint()..color = difficulty.color;
-    switch (difficulty._shape) {
-      case _Shape.circle:
-        canvas.drawCircle(r.center, r.width / 2, fill);
-      case _Shape.square:
-        canvas.drawRect(r.deflate(r.width * 0.06), fill);
-      case _Shape.diamond:
-        final c = r.center;
-        final half = r.width / 2;
-        canvas.drawPath(
-          Path()
-            ..moveTo(c.dx, c.dy - half)
-            ..lineTo(c.dx + half, c.dy)
-            ..lineTo(c.dx, c.dy + half)
-            ..lineTo(c.dx - half, c.dy)
-            ..close(),
-          fill,
-        );
-      case _Shape.ring:
-        canvas.drawCircle(
-          r.center,
-          r.width / 2 - r.width * 0.1,
-          Paint()
-            ..color = difficulty.color
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = r.width * 0.2,
-        );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GlyphPainter oldDelegate) =>
-      oldDelegate.difficulty != difficulty;
 }

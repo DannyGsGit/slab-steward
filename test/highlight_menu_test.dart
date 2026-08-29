@@ -38,12 +38,12 @@ Future<void> openMenu(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('opens with the three attribute rules ticked', (tester) async {
+  testWidgets('opens with both attribute rules ticked', (tester) async {
     final state = await pump(tester);
 
-    expect(state.lenses, {Lens.difficulty, Lens.surface, Lens.electricBicycle});
-    expect(find.text('3 rules'), findsOneWidget);
-    expect(find.text('Missing difficulty, surface or e-bike rule'), findsOne);
+    expect(state.lenses, {Lens.difficulty, Lens.electricBicycle});
+    expect(find.text('2 rules'), findsOneWidget);
+    expect(find.text('Missing difficulty or e-bike rule'), findsOne);
   });
 
   testWidgets('ticking rules accumulates, and the menu stays open', (
@@ -52,10 +52,8 @@ void main() {
     final state = await pump(tester);
     await openMenu(tester);
 
-    // Untick two of the defaults without reopening in between — the whole
-    // point of a multi-select.
-    await tester.tap(find.text(Lens.surface.label));
-    await tester.pumpAndSettle();
+    // Untick a default and tick another without reopening in between — the
+    // whole point of a multi-select.
     await tester.tap(find.text(Lens.electricBicycle.label));
     await tester.pumpAndSettle();
 

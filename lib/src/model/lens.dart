@@ -25,7 +25,7 @@ enum TravelMode {
 ///
 /// Lenses combine rather than compete: the rider picks any number of them, and
 /// a trail is only "done" when it answers all of them. That is what used to be
-/// a single fixed "Missing any" lens — selecting the three attribute lenses
+/// a single fixed "Missing any" lens — selecting the attribute lenses
 /// together is exactly it — and selecting none of them is the plain map.
 enum Lens {
   /// Purple where OSM doesn't say whether the current travel mode is allowed.
@@ -34,9 +34,6 @@ enum Lens {
 
   /// Does this trail have an IMBA difficulty rating?
   difficulty('Missing difficulty', 'difficulty', ['mtb:scale:imba']),
-
-  /// Does this trail have a surface?
-  surface('Missing surface', 'surface', ['surface']),
 
   /// Does this trail say whether e-bikes may ride it?
   electricBicycle('Missing e-bike access', 'e-bike rule', ['electric_bicycle']);
@@ -47,7 +44,7 @@ enum Lens {
   final String label;
 
   /// What the legend calls the thing the lens looks for, as a bare noun so it
-  /// reads inside a list: "Missing difficulty, surface or e-bike rule".
+  /// reads inside a list: "Missing difficulty or e-bike rule".
   final String noun;
 
   /// The OSM keys this lens inspects. Empty for [access], which asks about
