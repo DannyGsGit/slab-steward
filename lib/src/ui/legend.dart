@@ -16,19 +16,19 @@ class Legend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lens = state.lens;
+    final lenses = state.lenses.inOrder;
     final entries = <_Entry>[
-      if (lens.tintsSpecified)
-        _Entry(_color(specifiedColor), 'Has ${_hasLabel(lens)}')
+      if (lenses.tintsSpecified)
+        _Entry(_color(specifiedColor), 'Has ${_list(lenses, 'and')}')
       else
         _Entry(_color(trailColor), 'Trail'),
-      if (lens.showsUnspecified)
-        _Entry(
-          _color(unspecifiedColor),
-          lens == Lens.access ? 'Access unknown' : 'Missing ${_missingLabel(lens)}',
-        ),
+      if (lenses.isNotEmpty) _Entry(_color(unspecifiedColor), _missing(lenses)),
       if (state.mode != TravelMode.all)
-        _Entry(_color(noAccessTrailColor), 'Not open to this mode', dashed: true),
+        _Entry(
+          _color(noAccessTrailColor),
+          'Not open to this mode',
+          dashed: true,
+        ),
       _Entry(_color(trailColor), 'Informal / unofficial', dashed: true),
     ];
 
@@ -53,21 +53,20 @@ class Legend extends StatelessWidget {
   static Color _color(String hex) =>
       Color(int.parse(hex.substring(1), radix: 16) | 0xFF000000);
 
-  static String _hasLabel(Lens lens) => switch (lens) {
-    Lens.difficulty => 'difficulty',
-    Lens.surface => 'surface',
-    Lens.completeness => 'both',
-    _ => 'data',
-  };
+  /// The selected lenses as prose: "difficulty, surface and e-bike rule".
+  static String _list(List<Lens> lenses, String conjunction) {
+    final nouns = [for (final lens in lenses) lens.noun];
+    if (nouns.length == 1) return nouns.single;
+    return '${nouns.take(nouns.length - 1).join(', ')} '
+        '$conjunction ${nouns.last}';
+  }
 
-  /// [Lens.completeness] passes only when both keys are present, so a purple
-  /// line there means one *or* the other is missing.
-  static String _missingLabel(Lens lens) => switch (lens) {
-    Lens.difficulty => 'difficulty',
-    Lens.surface => 'surface',
-    Lens.completeness => 'difficulty or surface',
-    _ => 'data',
-  };
+  /// A trail has to answer every selected lens to draw teal, so a purple line
+  /// means any one of them is unanswered.
+  static String _missing(List<Lens> lenses) =>
+      lenses.length == 1 && lenses.single == Lens.access
+      ? 'Access unknown'
+      : 'Missing ${_list(lenses, 'or')}';
 }
 
 class _Entry extends StatelessWidget {

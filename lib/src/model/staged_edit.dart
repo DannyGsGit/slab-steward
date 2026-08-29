@@ -1,15 +1,17 @@
 import 'dart:math' as math;
 
 import 'difficulty.dart';
+import 'electric_bicycle.dart';
 import 'trail.dart';
 
 /// A trail attribute the guided editor can change.
 ///
-/// Difficulty only today. Surface and sanction status are the next two, and
-/// the panel builds its rows off this enum so adding one is a matter of
-/// teaching [StagedEdit] how to diff it.
+/// Surface and sanction status are the next two, and the panel builds its rows
+/// off this enum so adding one is a matter of teaching [StagedEdit] how to
+/// diff it.
 enum TrailAttribute {
-  difficulty('Difficulty');
+  difficulty('Difficulty'),
+  electricBicycle('E-bike access');
 
   const TrailAttribute(this.label);
 
@@ -35,6 +37,7 @@ class StagedEdit {
     this.nodeIds,
     this.baseTags = const {},
     this.difficulty,
+    this.electricBicycle,
     this.note,
   });
 
@@ -60,6 +63,32 @@ class StagedEdit {
       // Commons, which isn't built. Say so rather than let the user believe
       // OSM will carry it.
       note: value.isCommonsOnly ? Difficulty.commonsOnlyNote : null,
+    );
+  }
+
+  /// Stages an e-bike permission against [trail]'s current tags.
+  factory StagedEdit.electricBicycle(Trail trail, EbikeAccess value) {
+    final current = trail.tags[EbikeAccess.osmKey];
+    return StagedEdit(
+      osmWayId: trail.osmWayId,
+      trailName: trail.name,
+      baseVersion: trail.version,
+      geometry: trail.geometry,
+      nodeIds: trail.nodeIds,
+      baseTags: trail.tags,
+      attribute: TrailAttribute.electricBicycle,
+      // A value the picker can't express is still what OSM says, so the
+      // before/after names it rather than claiming the trail said nothing.
+      fromLabel: switch ((trail.electricBicycle, current)) {
+        (final mapped?, _) => mapped.label,
+        (null, final raw?) => raw,
+        _ => 'Not recorded',
+      },
+      toLabel: value.label,
+      electricBicycle: value,
+      tagChanges: {
+        if (value.osmValue != current) EbikeAccess.osmKey: value.osmValue,
+      },
     );
   }
 
@@ -103,6 +132,10 @@ class StagedEdit {
   /// Set when [attribute] is [TrailAttribute.difficulty], so the UI can draw
   /// the signage glyph for the staged value.
   final Difficulty? difficulty;
+
+  /// Set when [attribute] is [TrailAttribute.electricBicycle], for the same
+  /// reason [difficulty] is.
+  final EbikeAccess? electricBicycle;
 
   /// A caveat worth showing next to this edit, if any.
   final String? note;

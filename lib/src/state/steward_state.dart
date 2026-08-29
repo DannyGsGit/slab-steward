@@ -4,21 +4,29 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../model/difficulty.dart';
+import '../model/electric_bicycle.dart';
 import '../model/lens.dart';
 import '../model/staged_edit.dart';
+import '../map/otm_conventions.dart' show renderedTagKeys;
 import '../model/trail.dart';
-import '../osm/changeset_download.dart';
-import '../osm/changeset_preview.dart';
+import '../model/trail_overrides.dart';
 import '../osm/osm_api.dart';
+import '../osm/osm_auth.dart';
+import '../osm/osm_environment.dart';
 import '../osm/submission_gate.dart';
 
-/// What one application of a difficulty across a set of trails did.
+/// What one application of a value across a set of trails did.
 ///
-/// A batch is rarely uniform — some trails already carry the value, and some
-/// couldn't be read from the OSM API at all — and saying so afterwards is the
-/// difference between a bulk edit the rider trusts and one they have to audit
-/// by hand.
-typedef BatchResult = ({int staged, int unchanged, int unreadable});
+/// A batch is rarely uniform — some trails already carry the value, some
+/// couldn't be read from the OSM API at all, and some hold an answer Steward
+/// is not willing to overwrite — and saying so afterwards is the difference
+/// between a bulk edit the rider trusts and one they have to audit by hand.
+typedef BatchResult = ({
+  int staged,
+  int unchanged,
+  int unreadable,
+  int protected,
+});
 
 /// What the app knows right now: how the map is filtered, which trails (if any)
 /// the rider is working on, and what edits are waiting to be submitted.
@@ -27,9 +35,51 @@ typedef BatchResult = ({int staged, int unchanged, int unreadable});
 /// for a state-management package before there's a second one would be
 /// premature.
 class StewardState extends ChangeNotifier {
-  StewardState({OsmApi? osmApi}) : _osmApi = osmApi ?? OsmApi();
+  StewardState({
+    OsmApi? osmApi,
+    OsmAuthState? auth,
+    this.environment = osmEnvironment,
+  }) : _osmApi = osmApi ?? OsmApi(),
+       auth = auth ?? OsmAuthState() {
+    this.auth.restoreSession();
+    overrides = TrailOverrides(onChanged: _onOverridesChanged);
+    overrides.load();
+  }
+
+  /// Tags Steward has seen that the tileset hasn't caught up with. See
+  /// [TrailOverrides] — this is what keeps a trail from snapping back to
+  /// "unrated" the moment its edit is submitted.
+  late final TrailOverrides overrides;
+
+  void _onOverridesChanged() {
+    _styleRevision++;
+    notifyListeners();
+  }
+
+  /// Whether [tile] and [live] would draw differently. See [renderedTagKeys].
+  static bool _rendersDifferently(
+    Map<String, String> tile,
+    Map<String, String> live,
+  ) => renderedTagKeys.any((key) => tile[key] != live[key]);
+
+  /// Notes what the API just told us about [osmWayId], so the map can draw it
+  /// from that rather than from a tile build that predates it.
+  void _recordOverride(
+    int osmWayId,
+    Map<String, String> tags,
+    OverrideSource source,
+  ) => overrides.record(osmWayId, tags, source: source);
 
   final OsmApi _osmApi;
+
+  /// Which of the two configurations this build runs — passed on to every
+  /// gate [createSubmissionGate] makes. Injectable only so tests can exercise
+  /// both in one run; the app always takes the build's [osmEnvironment].
+  final OsmEnvironment environment;
+
+  /// The rider's OSM sign-in — required before [createSubmissionGate]'s
+  /// gate can actually submit anything, via [SubmissionGate.submit].
+  final OsmAuthState auth;
 
   /// How many way reads may be in flight at once while resolving a bulk
   /// selection. Steward is a well-behaved OSM API client before it is a fast
@@ -41,7 +91,14 @@ class StewardState extends ChangeNotifier {
   static const maxVisibleTrails = 250;
 
   TravelMode _mode = TravelMode.mtb;
-  Lens _lens = Lens.completeness;
+
+  /// The lenses the map colours by. Defaults to the three attribute lenses —
+  /// the "is this trail finished?" question Steward exists to answer.
+  final Set<Lens> _lenses = {
+    Lens.difficulty,
+    Lens.surface,
+    Lens.electricBicycle,
+  };
 
   /// Every trail Steward has looked at this session, provisional or
   /// authoritative, keyed by OSM way id. Selection, the in-view list and the
@@ -72,7 +129,10 @@ class StewardState extends ChangeNotifier {
   final List<StagedEdit> _stagedEdits = [];
 
   TravelMode get mode => _mode;
-  Lens get lens => _lens;
+
+  /// The lenses currently applied. A trail passes only when it answers every
+  /// one of them; an empty selection colours nothing.
+  Set<Lens> get lenses => UnmodifiableSetView(_lenses);
 
   /// Bumped whenever the map style needs rebuilding.
   int get styleRevision => _styleRevision;
@@ -87,14 +147,28 @@ class StewardState extends ChangeNotifier {
     if (_mode == mode) return;
     _mode = mode;
     // "Unknown access" asks a question that has no meaning without a mode.
-    if (mode == TravelMode.all && _lens == Lens.access) _lens = Lens.none;
+    if (mode == TravelMode.all) _lenses.remove(Lens.access);
     _styleRevision++;
     notifyListeners();
   }
 
-  void setLens(Lens lens) {
-    if (_lens == lens) return;
-    _lens = lens;
+  void setLenses(Set<Lens> lenses) {
+    if (setEquals(_lenses, lenses)) return;
+    _lenses
+      ..clear()
+      ..addAll(lenses);
+    _styleRevision++;
+    notifyListeners();
+  }
+
+  /// Adds or removes one lens, leaving the rest of the selection alone.
+  void setLensEnabled(Lens lens, bool enabled) {
+    if (_lenses.contains(lens) == enabled) return;
+    if (enabled) {
+      _lenses.add(lens);
+    } else {
+      _lenses.remove(lens);
+    }
     _styleRevision++;
     notifyListeners();
   }
@@ -105,9 +179,7 @@ class StewardState extends ChangeNotifier {
   Trail? trailFor(int osmWayId) => _trails[osmWayId];
 
   /// The working set, in the order trails joined it.
-  List<Trail> get selectedTrails => [
-    for (final id in _selection) ?_trails[id],
-  ];
+  List<Trail> get selectedTrails => [for (final id in _selection) ?_trails[id]];
 
   /// The one selected trail, or null when none or several are. The detail
   /// panel is a single-trail view by definition; several trails get the bulk
@@ -222,6 +294,13 @@ class StewardState extends ChangeNotifier {
         geometry: way.geometry,
         nodeIds: way.nodeIds,
       );
+      // The read is by definition newer than the tiles, and carries whatever
+      // anyone else has changed since they were cut — but most trails haven't
+      // changed, and caching a read that only repeats what the map already
+      // draws would restyle the map on every first click for nothing.
+      if (!known.isAuthoritative && _rendersDifferently(known.tags, way.tags)) {
+        _recordOverride(osmWayId, way.tags, OverrideSource.read);
+      }
     } on OsmApiException catch (e) {
       if (_fetchTokens[osmWayId] != token) return;
       _readErrors[osmWayId] = e.isGone
@@ -412,10 +491,47 @@ class StewardState extends ChangeNotifier {
   ///
   /// Trails whose tags aren't authoritative are left alone and counted in the
   /// result: the editor never composes a changeset against tile data.
-  BatchResult applyDifficulty(Iterable<Trail> trails, Difficulty value) {
+  BatchResult applyDifficulty(Iterable<Trail> trails, Difficulty value) =>
+      _applyAcross(
+        trails,
+        TrailAttribute.difficulty,
+        isCurrent: (trail) => trail.difficulty == value,
+        stage: (trail) => StagedEdit.difficulty(trail, value),
+      );
+
+  /// Stages an e-bike permission across [trails], on exactly the terms
+  /// [applyDifficulty] describes, with one addition: a trail already answering
+  /// with a value outside Steward's two options is left alone.
+  ///
+  /// `electric_bicycle` is one key, so writing to it *replaces* what's there —
+  /// there is no additive form. A trail tagged `designated` or `permissive`
+  /// already says everything "allowed" would say and more, and a rider working
+  /// through forty trails would never see it go. So Steward doesn't write it:
+  /// those trails come back counted as protected, to be named rather than
+  /// silently downgraded.
+  BatchResult applyElectricBicycle(Iterable<Trail> trails, EbikeAccess value) =>
+      _applyAcross(
+        trails,
+        TrailAttribute.electricBicycle,
+        isCurrent: (trail) => trail.electricBicycle == value,
+        isProtected: (trail) => trail.hasUnmappedElectricBicycle,
+        stage: (trail) => StagedEdit.electricBicycle(trail, value),
+      );
+
+  /// The shared body of the per-attribute bulk appliers: every attribute
+  /// stages, skips and walks back on the same rules, and one trail is just a
+  /// batch of one.
+  BatchResult _applyAcross(
+    Iterable<Trail> trails,
+    TrailAttribute attribute, {
+    required bool Function(Trail trail) isCurrent,
+    required StagedEdit Function(Trail trail) stage,
+    bool Function(Trail trail)? isProtected,
+  }) {
     var staged = 0;
     var unchanged = 0;
     var unreadable = 0;
+    var protected = 0;
     var touched = false;
 
     for (final trail in trails) {
@@ -423,13 +539,19 @@ class StewardState extends ChangeNotifier {
         unreadable++;
         continue;
       }
-      final removed = _removeEdit(trail.osmWayId, TrailAttribute.difficulty);
-      if (value == trail.difficulty) {
+      // Checked before anything is removed: a protected trail is one this
+      // batch never touches, including any edit already staged on it.
+      if (isProtected?.call(trail) ?? false) {
+        protected++;
+        continue;
+      }
+      final removed = _removeEdit(trail.osmWayId, attribute);
+      if (isCurrent(trail)) {
         unchanged++;
         touched |= removed;
         continue;
       }
-      _stagedEdits.add(StagedEdit.difficulty(trail, value));
+      _stagedEdits.add(stage(trail));
       staged++;
       touched = true;
     }
@@ -438,7 +560,41 @@ class StewardState extends ChangeNotifier {
       _stagedRevision++;
       notifyListeners();
     }
-    return (staged: staged, unchanged: unchanged, unreadable: unreadable);
+    return (
+      staged: staged,
+      unchanged: unchanged,
+      unreadable: unreadable,
+      protected: protected,
+    );
+  }
+
+  /// Stages a difficulty on one trail the rider has just picked a value for,
+  /// reading its authoritative tags first if they aren't in hand yet.
+  Future<BatchResult> setDifficulty(int osmWayId, Difficulty value) =>
+      _stageOnTrail(osmWayId, (trail) => applyDifficulty([trail], value));
+
+  /// Stages an e-bike permission on one trail, the same way [setDifficulty]
+  /// stages a rating.
+  Future<BatchResult> setElectricBicycle(int osmWayId, EbikeAccess value) =>
+      _stageOnTrail(osmWayId, (trail) => applyElectricBicycle([trail], value));
+
+  /// Resolves one trail and applies [stage] to it.
+  ///
+  /// The editors read a trail straight off the tile, so picking a value is
+  /// usually the first moment there is any reason to spend an OSM API call on
+  /// it — the read happens here, at the moment of intent, rather than for
+  /// every trail on screen up front. A trail OSM couldn't answer for stages
+  /// nothing and reports itself unreadable; [readErrorFor] says why.
+  Future<BatchResult> _stageOnTrail(
+    int osmWayId,
+    BatchResult Function(Trail trail) stage,
+  ) async {
+    await ensureAuthoritative(osmWayId);
+    final trail = _trails[osmWayId];
+    if (trail == null || !trail.isAuthoritative) {
+      return (staged: 0, unchanged: 0, unreadable: 1, protected: 0);
+    }
+    return stage(trail);
   }
 
   void unstageEdit(int osmWayId, TrailAttribute attribute) {
@@ -456,6 +612,29 @@ class StewardState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Called once a changeset has closed: folds every edit that just went out
+  /// into [overrides], then empties the staging area.
+  ///
+  /// The two halves belong together. Clearing alone is what made a submitted
+  /// trail *lose* its blue staged glow and fall back to the tileset's stale
+  /// magenta — the work landing was the moment the map stopped showing it.
+  void applySubmitted() {
+    for (final trail in stagedEditsByTrail.entries) {
+      final tags = <String, String>{...trail.value.first.baseTags};
+      for (final edit in trail.value) {
+        edit.tagChanges.forEach((key, value) {
+          if (value == null) {
+            tags.remove(key);
+          } else {
+            tags[key] = value;
+          }
+        });
+      }
+      _recordOverride(trail.key, tags, OverrideSource.submitted);
+    }
+    clearStagedEdits();
+  }
+
   void clearStagedEdits() {
     if (_stagedEdits.isEmpty) return;
     _stagedEdits.clear();
@@ -467,7 +646,8 @@ class StewardState extends ChangeNotifier {
   /// hashtag, a live re-read of every staged trail, and a conflict check
   /// against what each edit was staged on. See
   /// docs/slab-steward-osm-changeset-spec.md §4.
-  SubmissionGate createSubmissionGate() => SubmissionGate(osmApi: _osmApi);
+  SubmissionGate createSubmissionGate() =>
+      SubmissionGate(osmApi: _osmApi, environment: environment);
 
   /// Resolves a submission conflict in the rider's favor: keeps the pending
   /// value but rebases the edit onto the live tags/version the gate just
@@ -475,6 +655,7 @@ class StewardState extends ChangeNotifier {
   void rebaseEditOnLive(int osmWayId, TrailAttribute attribute, OsmWay live) {
     final edit = stagedEditFor(osmWayId, attribute);
     if (edit == null) return;
+    _recordOverride(osmWayId, live.tags, OverrideSource.read);
     final liveTrail = Trail(
       osmWayId: live.id,
       tags: live.tags,
@@ -486,41 +667,9 @@ class StewardState extends ChangeNotifier {
     switch (attribute) {
       case TrailAttribute.difficulty:
         stageEdit(StagedEdit.difficulty(liveTrail, edit.difficulty!));
+      case TrailAttribute.electricBicycle:
+        stageEdit(StagedEdit.electricBicycle(liveTrail, edit.electricBicycle!));
     }
-  }
-
-  /// Writes out the changeset a passed [gate] approved and clears the staged
-  /// edits it covered.
-  ///
-  /// Nothing reaches OpenStreetMap yet — there is no token to write under
-  /// until OSM sign-in lands. Instead, this renders the changeset-create and
-  /// osmChange-upload calls a real submit would make and saves them, so the
-  /// shape of that future request can be checked by hand. Callers must say
-  /// so in the UI. The gate has already fetched fresh tags and versions for
-  /// everything going to OSM, so nothing here does network I/O.
-  String finalizeSubmission({
-    required SubmissionGate gate,
-    required bool requestReview,
-  }) {
-    assert(gate.finalComment.trim().isNotEmpty, 'A changeset needs a comment');
-    final localOnly = [
-      for (final trail in stagedTrails)
-        if (trail.edits.every((e) => !e.changesOsm)) trail,
-    ];
-    final preview = buildChangesetPreview(
-      comment: gate.finalComment,
-      requestReview: requestReview,
-      writes: gate.resolvedWrites,
-      localOnlyTrails: localOnly,
-    );
-    final timestamp = DateTime.now()
-        .toUtc()
-        .toIso8601String()
-        .replaceAll(RegExp(r'[-:]'), '')
-        .replaceAll(RegExp(r'\.\d+Z$'), 'Z');
-    final savedTo = saveChangesetPreview('submit_$timestamp.txt', preview);
-    clearStagedEdits();
-    return savedTo;
   }
 
   bool _removeEdit(int osmWayId, TrailAttribute attribute) {
@@ -534,6 +683,7 @@ class StewardState extends ChangeNotifier {
   @override
   void dispose() {
     _osmApi.dispose();
+    auth.dispose();
     super.dispose();
   }
 }

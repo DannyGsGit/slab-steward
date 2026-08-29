@@ -2,20 +2,19 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'osm_change_xml.dart';
+import 'osm_environment.dart';
+import 'submission_gate.dart' show ResolvedWrite;
+
 /// Thin client for the slice of OSM API v0.6 that Steward needs.
 ///
-/// Called directly from the browser, no proxy — see the product description §7.
-/// Today that's read-only; the changeset half (open / upload / close, under the
-/// user's own OAuth token) lands with the editor.
+/// Called directly from the browser, no proxy — see the product description
+/// §7. Reads and the changeset write path (open / upload / close, under the
+/// rider's own OAuth token) both go through here.
 class OsmApi {
-  OsmApi({http.Client? client, this.baseUrl = productionApi})
-    : _client = client ?? http.Client();
-
-  static const productionApi = 'https://api.openstreetmap.org';
-
-  /// The OSM dev sandbox. Point at this while wiring up editing so test
-  /// changesets never reach the live map.
-  static const developmentApi = 'https://api06.dev.openstreetmap.org';
+  OsmApi({http.Client? client, String? baseUrl})
+    : _client = client ?? http.Client(),
+      baseUrl = baseUrl ?? osmApiHost;
 
   final http.Client _client;
   final String baseUrl;
@@ -64,14 +63,118 @@ class OsmApi {
     return OsmWay(
       id: (way['id'] as num).toInt(),
       version: (way['version'] as num).toInt(),
-      tags: ((way['tags'] as Map<String, Object?>?) ?? const {})
-          .map((k, v) => MapEntry(k, v.toString())),
+      tags: ((way['tags'] as Map<String, Object?>?) ?? const {}).map(
+        (k, v) => MapEntry(k, v.toString()),
+      ),
       geometry: [for (final nodeId in nodeIds) ?nodes[nodeId.toInt()]],
       nodeIds: [for (final nodeId in nodeIds) nodeId.toInt()],
     );
   }
 
+  /// Resolves the signed-in rider's OSM identity — the display name shown
+  /// next to "signed in as", and the id nothing here actually needs yet but
+  /// which is cheap to carry along.
+  Future<OsmIdentity> fetchUserDetails({required String bearerToken}) async {
+    final uri = Uri.parse('$baseUrl/api/0.6/user/details.json');
+    final response = await _authorized(bearerToken).get(uri);
+    _checkOk(response, action: 'reading your OSM profile');
+    final body = jsonDecode(response.body) as Map<String, Object?>;
+    final user = body['user'] as Map<String, Object?>;
+    return OsmIdentity(
+      id: (user['id'] as num).toInt(),
+      displayName: user['display_name'] as String,
+    );
+  }
+
+  /// Opens a changeset carrying [tags] and returns its id. The first of the
+  /// three calls a submission makes — see
+  /// docs/slab-steward-osm-changeset-spec.md §1.
+  Future<int> openChangeset({
+    required Map<String, String> tags,
+    required String bearerToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/0.6/changeset/create');
+    final response = await _authorized(bearerToken).put(
+      uri,
+      headers: {'Content-Type': 'text/xml; charset=utf-8'},
+      body: changesetCreateXml(tags),
+    );
+    _checkOk(response, action: 'opening a changeset');
+    return int.parse(response.body.trim());
+  }
+
+  /// Uploads the diff for [writes] as one atomic transaction — an
+  /// `osmChange` document, not per-element PUTs, so a partial failure can't
+  /// leave some trails written and others not. See the spec's "Diff upload
+  /// vs. per-element PUT".
+  Future<void> uploadChangeset({
+    required int changesetId,
+    required List<ResolvedWrite> writes,
+    required String bearerToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/0.6/changeset/$changesetId/upload');
+    final response = await _authorized(bearerToken).post(
+      uri,
+      headers: {'Content-Type': 'text/xml; charset=utf-8'},
+      body: osmChangeXml(changesetId: changesetId, writes: writes),
+    );
+    _checkOk(response, action: 'uploading the changeset');
+  }
+
+  Future<void> closeChangeset({
+    required int changesetId,
+    required String bearerToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/0.6/changeset/$changesetId/close');
+    final response = await _authorized(bearerToken).put(uri);
+    _checkOk(response, action: 'closing the changeset');
+  }
+
+  http.Client _authorized(String bearerToken) =>
+      _BearerClient(_client, bearerToken);
+
+  void _checkOk(http.Response response, {required String action}) {
+    if (response.statusCode ~/ 100 == 2) return;
+    throw OsmApiException(
+      'OSM API returned ${response.statusCode} while $action'
+      '${response.body.isEmpty ? '' : ': ${response.body}'}',
+      statusCode: response.statusCode,
+    );
+  }
+
   void dispose() => _client.close();
+}
+
+/// Adds the bearer token to every request without needing every call site to
+/// build its own headers map by hand.
+class _BearerClient extends http.BaseClient {
+  _BearerClient(this._inner, this._token);
+
+  final http.Client _inner;
+  final String _token;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    request.headers['Authorization'] = 'Bearer $_token';
+    return _inner.send(request);
+  }
+}
+
+/// The rider's OSM account, as returned by `/api/0.6/user/details` — the
+/// name displayed for "signed in as", cached alongside the token so it
+/// survives a page reload without another round trip.
+class OsmIdentity {
+  const OsmIdentity({required this.id, required this.displayName});
+
+  final int id;
+  final String displayName;
+
+  Map<String, Object?> toJson() => {'id': id, 'displayName': displayName};
+
+  factory OsmIdentity.fromJson(Map<String, Object?> json) => OsmIdentity(
+    id: (json['id'] as num).toInt(),
+    displayName: json['displayName'] as String,
+  );
 }
 
 class OsmWay {
@@ -102,6 +205,11 @@ class OsmApiException implements Exception {
 
   /// The way was deleted or redacted.
   bool get isGone => statusCode == 410 || statusCode == 404;
+
+  /// The access token is dead — revoked, or never valid. The only reliable
+  /// "you're signed out now" signal OSM's OAuth tokens give, since they
+  /// don't expire on a schedule Steward can predict ahead of time.
+  bool get isUnauthorized => statusCode == 401;
 
   @override
   String toString() => message;

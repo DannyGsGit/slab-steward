@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:slab_steward/src/model/difficulty.dart';
+import 'package:slab_steward/src/model/electric_bicycle.dart';
 import 'package:slab_steward/src/model/staged_edit.dart';
 import 'package:slab_steward/src/model/trail.dart';
 import 'package:slab_steward/src/osm/osm_api.dart';
@@ -12,12 +13,19 @@ import 'package:slab_steward/src/ui/staged_changes.dart';
 import 'package:slab_steward/src/ui/trail_list_panel.dart';
 
 /// A tile feature as the map reports it.
-Map<String, Object?> _tile(int id, String name, {String? imba, String? surface}) => {
+Map<String, Object?> _tile(
+  int id,
+  String name, {
+  String? imba,
+  String? surface,
+  String? ebike,
+}) => {
   'OSM_ID': id,
   'OSM_VERSION': 7,
   'name': name,
   'mtb:scale:imba': ?imba,
   'surface': ?surface,
+  'electric_bicycle': ?ebike,
 };
 
 /// A fake OSM API that answers any way id, and counts what it was asked for —
@@ -91,27 +99,36 @@ void main() {
       expect(state.selectedTrails.every((t) => t.isAuthoritative), isTrue);
     });
 
-    test('"select all" reads nothing until there is an edit to compose', () async {
-      final osm = _FakeOsm();
-      final state = osm.newState();
-      addTearDown(state.dispose);
+    test(
+      '"select all" reads nothing until there is an edit to compose',
+      () async {
+        final osm = _FakeOsm();
+        final state = osm.newState();
+        addTearDown(state.dispose);
 
-      state.setVisibleTrails([for (var i = 1; i <= 30; i++) _tile(i, 'Trail $i')]);
-      state.setSelection([for (var i = 1; i <= 30; i++) i]);
+        state.setVisibleTrails([
+          for (var i = 1; i <= 30; i++) _tile(i, 'Trail $i'),
+        ]);
+        state.setSelection([for (var i = 1; i <= 30; i++) i]);
 
-      expect(state.selectionCount, 30);
-      expect(osm.reads, isEmpty, reason: 'one click must not be 30 API calls');
+        expect(state.selectionCount, 30);
+        expect(
+          osm.reads,
+          isEmpty,
+          reason: 'one click must not be 30 API calls',
+        );
 
-      final progress = <(int, int)>[];
-      await state.resolveSelection(
-        onProgress: (done, total) => progress.add((done, total)),
-      );
+        final progress = <(int, int)>[];
+        await state.resolveSelection(
+          onProgress: (done, total) => progress.add((done, total)),
+        );
 
-      expect(osm.reads, hasLength(30));
-      expect(state.editableSelection, hasLength(30));
-      expect(progress.first, (0, 30));
-      expect(progress.last, (30, 30));
-    });
+        expect(osm.reads, hasLength(30));
+        expect(state.editableSelection, hasLength(30));
+        expect(progress.first, (0, 30));
+        expect(progress.last, (30, 30));
+      },
+    );
 
     test('dropping a trail mid-read abandons the answer', () async {
       final osm = _FakeOsm();
@@ -158,7 +175,7 @@ void main() {
         Difficulty.medium,
       );
 
-      expect(report, (staged: 1, unchanged: 1, unreadable: 0));
+      expect(report, (staged: 1, unchanged: 1, unreadable: 0, protected: 0));
       // A batch is a convenience for composing changes, not a different kind
       // of change: the review list still holds one edit per trail.
       expect(state.stagedEditsByTrail.keys, [1]);
@@ -193,7 +210,7 @@ void main() {
         state.selectedTrails,
         Difficulty.medium,
       );
-      expect(report, (staged: 1, unchanged: 1, unreadable: 0));
+      expect(report, (staged: 1, unchanged: 1, unreadable: 0, protected: 0));
       expect(state.stagedEditsByTrail.keys, [1]);
     });
 
@@ -204,7 +221,7 @@ void main() {
 
       final report = state.applyDifficulty([provisional], Difficulty.easy);
 
-      expect(report, (staged: 0, unchanged: 0, unreadable: 1));
+      expect(report, (staged: 0, unchanged: 0, unreadable: 1, protected: 0));
       expect(state.hasStagedEdits, isFalse);
     });
   });
@@ -302,6 +319,25 @@ void main() {
       expect(find.text('Select all 1'), findsOneWidget);
     });
 
+    testWidgets('e-bike access is one of the questions the list asks', (
+      tester,
+    ) async {
+      await pumpList(
+        tester,
+        trails: [
+          _tile(1, 'Gravy Train', imba: '2', surface: 'compacted'),
+          _tile(2, 'Bootcamp', imba: '2', surface: 'compacted', ebike: 'no'),
+        ],
+      );
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'No e-bike rule'));
+      await tester.pumpAndSettle();
+
+      // Fully rated and surfaced is no longer fully answered.
+      expect(find.text('Gravy Train'), findsOneWidget);
+      expect(find.text('Bootcamp'), findsNothing);
+    });
+
     testWidgets('select all ticks every trail the filter is showing', (
       tester,
     ) async {
@@ -339,37 +375,39 @@ void main() {
       final osm = _FakeOsm();
       final state = await pumpList(tester, osm: osm);
 
-      // The list is built from tile data; the pencil is what asks OSM for the
-      // authoritative tags this edit will be composed against.
-      await tester.tap(find.byTooltip('Edit difficulty').first);
-      await tester.pumpAndSettle();
-      expect(osm.reads, hasLength(1));
-
-      await tester.tap(find.byType(DropdownButton<Difficulty>));
+      // The list is built from tile data; picking a value is what asks OSM for
+      // the authoritative tags the edit will be composed against, and it
+      // stages in the same gesture — no pencil, no confirm.
+      await tester.tap(find.byType(DropdownButton<Difficulty>).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Difficult').last);
       await tester.pumpAndSettle();
 
-      // Staging stays explicit, in the list as in the panel.
-      expect(state.hasStagedEdits, isFalse);
-      await tester.tap(find.byTooltip('Stage this change'));
-      await tester.pumpAndSettle();
-
+      expect(osm.reads, hasLength(1));
       expect(state.stagedEditCount, 1);
       expect(find.text('STAGED'), findsOneWidget);
       // Editing a row does not drag it into the working set.
       expect(state.hasSelection, isFalse);
+
+      // And the undo beside it walks the change back.
+      await tester.tap(find.byTooltip('Discard this staged change'));
+      await tester.pumpAndSettle();
+      expect(state.hasStagedEdits, isFalse);
     });
 
-    testWidgets('an unreadable trail says so rather than offering a picker', (
+    testWidgets('a trail OSM cannot confirm stages nothing, and says why', (
       tester,
     ) async {
-      await pumpList(tester, osm: _FakeOsm(status: 500));
+      final state = await pumpList(tester, osm: _FakeOsm(status: 500));
 
-      await tester.tap(find.byTooltip('Edit difficulty').first);
+      await tester.tap(find.byType(DropdownButton<Difficulty>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Difficult').last);
       await tester.pumpAndSettle();
 
-      expect(find.byType(DropdownButton<Difficulty>), findsNothing);
+      // Nothing is ever composed against tile data, so the pick is dropped
+      // rather than staged against a version that may already be stale.
+      expect(state.hasStagedEdits, isFalse);
       expect(find.textContaining('OSM API returned 500'), findsOneWidget);
     });
   });
@@ -418,8 +456,78 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(state.stagedEditCount, 1);
-      expect(find.text('Staged 1 change. 1 already rated medium.'), findsOneWidget);
+      expect(
+        find.text('Difficulty — staged 1 change. 1 already rated medium.'),
+        findsOneWidget,
+      );
       expect(find.text('Review 1 change'), findsOneWidget);
+    });
+
+    testWidgets('one pass can set both fields, and reports each on its own', (
+      tester,
+    ) async {
+      // Room for both pickers and the report under them, so what's asserted
+      // is what the panel draws rather than what fits an 800×600 window.
+      tester.view.physicalSize = const Size(900, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final osm = _FakeOsm(
+        tagsFor: (id) => id == 2 ? const {'electric_bicycle': 'no'} : const {},
+      );
+      final state = osm.newState();
+      addTearDown(state.dispose);
+      await state.selectFromTile(_tile(1, 'Gravy Train'));
+      await state.toggleFromTile(_tile(2, 'Bootcamp'));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListenableBuilder(
+              listenable: state,
+              builder: (context, _) => SelectionPanel(state: state),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<Difficulty>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Easy').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButton<EbikeAccess>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Not allowed').last);
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(
+        find.widgetWithText(FilledButton, 'Stage on 2 trails'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Stage on 2 trails'));
+      await tester.pumpAndSettle();
+
+      // Two trails rated, one e-bike permission staged — Bootcamp already
+      // said no e-bikes, which is not an edit.
+      expect(state.stagedEditCount, 3);
+      expect(
+        state.stagedEditFor(1, TrailAttribute.electricBicycle)?.tagChanges,
+        {'electric_bicycle': 'no'},
+      );
+      expect(state.stagedEditFor(2, TrailAttribute.electricBicycle), isNull);
+      // One line per attribute: "staged 2" means something different for a
+      // rating than for an access tag, and a merged total would hide that.
+      expect(
+        find.textContaining('Difficulty — staged 2 changes.'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining(
+          'E-bike access — staged 1 change. 1 already set to not allowed.',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('a trail can be dropped from the set', (tester) async {
@@ -440,7 +548,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Drop this trail from the selection').first);
+      await tester.tap(
+        find.byTooltip('Drop this trail from the selection').first,
+      );
       await tester.pumpAndSettle();
       expect(state.selectionCount, 1);
     });
@@ -467,7 +577,9 @@ void main() {
       expect(state.stagedEditCount, 3);
 
       await tester.pumpWidget(
-        MaterialApp(home: Scaffold(body: StagedChangesDialog(state: state))),
+        MaterialApp(
+          home: Scaffold(body: StagedChangesDialog(state: state)),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -476,10 +588,7 @@ void main() {
       expect(find.text('Way 1'), findsOneWidget);
       expect(find.text('Way 2'), findsOneWidget);
       expect(find.text('Way 3'), findsOneWidget);
-      expect(
-        find.text('Difficulty: Not rated → Difficult'),
-        findsNWidgets(3),
-      );
+      expect(find.text('Difficulty: Not rated → Difficult'), findsNWidgets(3));
       expect(find.text('mtb:scale:imba=3'), findsNWidgets(3));
 
       await tester.tap(find.byTooltip('Remove this change').first);

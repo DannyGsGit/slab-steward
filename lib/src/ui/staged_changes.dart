@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../model/staged_edit.dart';
+import '../osm/oauth_popup.dart' show OAuthPopupCancelled;
+import '../osm/osm_environment.dart';
 import '../osm/submission_gate.dart';
 import '../state/steward_state.dart';
 
@@ -47,13 +50,9 @@ class StagedChangesButton extends StatelessWidget {
   }
 }
 
-String _countLabel(int count) =>
-    count == 1 ? '1 change' : '$count changes';
+String _countLabel(int count) => count == 1 ? '1 change' : '$count changes';
 
-Future<void> showStagedChangesDialog(
-  BuildContext context,
-  StewardState state,
-) {
+Future<void> showStagedChangesDialog(BuildContext context, StewardState state) {
   return showDialog<void>(
     context: context,
     builder: (_) => StagedChangesDialog(state: state),
@@ -85,11 +84,14 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
   _Step _step = _Step.review;
   SubmissionGate? _gate;
 
-  /// Set once a passed gate has actually been finalized, so the checklist
-  /// can report success and wait for the rider to close it rather than
-  /// closing out from under them.
+  /// Set once a passed gate has actually submitted, so the checklist can
+  /// report success and wait for the rider to close it rather than closing
+  /// out from under them.
   int? _finalizedCount;
-  String? _savedTo;
+
+  /// An error from the most recent sign-in attempt, shown next to the
+  /// sign-in button. Cleared on the next attempt.
+  String? _authError;
 
   /// Conflicts the rider has already acted on this run, tracked by identity
   /// so the list can shrink live without waiting on a re-check.
@@ -116,21 +118,52 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
       trails: widget.state.stagedTrails,
     );
     if (!mounted) return;
-    if (passed) _finalize(gate);
+    if (passed) await _submit(gate);
   }
 
-  void _finalize(SubmissionGate gate) {
+  /// The point of no return: on a `live` build this writes to OpenStreetMap,
+  /// and a closed changeset can't be un-submitted. Only reachable once [gate]
+  /// has passed every pre-flight check and the rider is signed in, which the
+  /// review step's Submit button already enforces.
+  ///
+  /// Nothing here branches on the configuration — a dry run reports success
+  /// the same way, and this folds the result into the override cache and
+  /// empties staging just as it would after a real write.
+  Future<void> _submit(SubmissionGate gate) async {
+    final token = widget.state.auth.bearerToken;
+    if (token == null) return;
     final count = widget.state.stagedEditCount;
-    final savedTo = widget.state.finalizeSubmission(
-      gate: gate,
+    final ok = await gate.submit(
+      bearerToken: token,
       requestReview: _requestReview,
     );
-    // Stays open on purpose — the rider closes it once they've read the
-    // result, rather than it vanishing the moment the last check passes.
-    setState(() {
-      _finalizedCount = count;
-      _savedTo = savedTo;
-    });
+    if (!mounted) return;
+    if (ok) {
+      // Folds what just went out into the override cache before emptying the
+      // staging area, so the trail keeps rendering as edited instead of
+      // reverting to whatever the tileset last knew.
+      widget.state.applySubmitted();
+      // Stays open on purpose — the rider closes it once they've read the
+      // result, rather than it vanishing the moment the last check passes.
+      setState(() => _finalizedCount = count);
+    } else {
+      // A rejected token can't be retried as-is; drop it so the review step
+      // offers sign-in again rather than a Submit button that can't work.
+      if (gate.tokenRejected) widget.state.auth.clearOnUnauthorized();
+      setState(() {}); // the failure itself is already on gate.checks
+    }
+  }
+
+  Future<void> _signIn() async {
+    setState(() => _authError = null);
+    try {
+      await widget.state.auth.signIn();
+    } on OAuthPopupCancelled {
+      // The rider closed the popup themselves — not an error worth showing.
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _authError = '$e');
+    }
   }
 
   void _backToReview() {
@@ -240,6 +273,9 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
             onRequestReviewChanged: (value) =>
                 setState(() => _requestReview = value),
             onSubmit: _runGate,
+            onSignIn: _signIn,
+            onSignOut: () => widget.state.auth.signOut(),
+            authError: _authError,
             state: widget.state,
           ),
           const Divider(height: 1),
@@ -301,7 +337,10 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
           child: Row(
             children: [
               Expanded(
-                child: Text('Submission checks', style: theme.textTheme.titleLarge),
+                child: Text(
+                  'Submission checks',
+                  style: theme.textTheme.titleLarge,
+                ),
               ),
               IconButton(
                 icon: const Icon(Icons.close),
@@ -317,12 +356,16 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
             shrinkWrap: true,
             children: [
               for (final check in gate.checks) _CheckRow(check: check),
-              if (_savedTo case final savedTo?) ...[
+              if (_finalizedCount case final count?) ...[
                 const SizedBox(height: 16),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.check_circle, color: Colors.green.shade600, size: 20),
+                    Icon(
+                      Icons.check_circle,
+                      color: Colors.green.shade600,
+                      size: 20,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -334,22 +377,29 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'OpenStreetMap sign-in is not built yet, so '
-                            'nothing was submitted. Cleared '
-                            '${_countLabel(_finalizedCount ?? 0)} — the API '
-                            'calls it would have made were saved to '
-                            '$savedTo.',
+                            'Submitted ${_countLabel(count)} to $osmLabel.',
                             style: theme.textTheme.bodySmall,
                           ),
+                          if (gate.changesetUrl case final url?) ...[
+                            const SizedBox(height: 4),
+                            InkWell(
+                              onTap: () => launchUrl(Uri.parse(url)),
+                              child: Text(
+                                url,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
                   ],
                 ),
               ],
-              if (gate.checks
-                      .firstWhere((c) => c.id == 'comment')
-                      .status ==
+              if (gate.checks.firstWhere((c) => c.id == 'comment').status ==
                   CheckStatus.failed) ...[
                 const SizedBox(height: 12),
                 FilledButton.tonal(
@@ -424,7 +474,7 @@ class _StagedChangesDialogState extends State<StagedChangesDialog> {
         if (!isRunning)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: _savedTo != null
+            child: _finalizedCount != null
                 ? Align(
                     alignment: Alignment.centerRight,
                     child: FilledButton(
@@ -528,7 +578,9 @@ class _ConflictRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          border: Border.all(color: theme.colorScheme.error.withValues(alpha: 0.4)),
+          border: Border.all(
+            color: theme.colorScheme.error.withValues(alpha: 0.4),
+          ),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Column(
@@ -573,6 +625,9 @@ class _SubmitSection extends StatelessWidget {
     required this.requestReview,
     required this.onRequestReviewChanged,
     required this.onSubmit,
+    required this.onSignIn,
+    required this.onSignOut,
+    required this.authError,
     required this.state,
   });
 
@@ -580,6 +635,9 @@ class _SubmitSection extends StatelessWidget {
   final bool requestReview;
   final ValueChanged<bool> onRequestReviewChanged;
   final VoidCallback onSubmit;
+  final VoidCallback onSignIn;
+  final VoidCallback onSignOut;
+  final String? authError;
   final StewardState state;
 
   @override
@@ -623,7 +681,8 @@ class _SubmitSection extends StatelessWidget {
                     value: requestReview,
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    onChanged: (value) => onRequestReviewChanged(value ?? false),
+                    onChanged: (value) =>
+                        onRequestReviewChanged(value ?? false),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -637,13 +696,77 @@ class _SubmitSection extends StatelessWidget {
               ),
             ),
           ),
+          // Kept to a single row either way: this sits above the list of
+          // staged edits, and every line spent here is a trail the rider
+          // can't see while reviewing what they're about to submit.
+          ListenableBuilder(
+            listenable: state.auth,
+            builder: (context, _) {
+              final auth = state.auth;
+              if (!auth.isSignedIn) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Not signed in — submitting writes to $osmLabel.',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.tonal(
+                          onPressed: auth.isSigningIn ? null : onSignIn,
+                          child: auth.isSigningIn
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Sign in'),
+                        ),
+                      ],
+                    ),
+                    if (authError case final error?)
+                      Text(
+                        error,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Signed in as ${auth.identity?.displayName} — '
+                      'submitting to $osmLabel.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: onSignOut,
+                    child: const Text('Sign out'),
+                  ),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 4),
           ListenableBuilder(
-            listenable: comment,
+            listenable: Listenable.merge([comment, state.auth]),
             builder: (context, _) => FilledButton.icon(
               icon: const Icon(Icons.upload_outlined, size: 18),
               label: Text('Submit ${_countLabel(state.stagedEditCount)}'),
-              onPressed: comment.text.trim().isEmpty ? null : onSubmit,
+              onPressed: comment.text.trim().isEmpty || !state.auth.isSignedIn
+                  ? null
+                  : onSubmit,
             ),
           ),
         ],

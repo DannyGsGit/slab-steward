@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:slab_steward/src/model/difficulty.dart';
+import 'package:slab_steward/src/model/electric_bicycle.dart';
 import 'package:slab_steward/src/model/surface.dart';
 import 'package:slab_steward/src/model/trail.dart';
 
@@ -52,6 +53,71 @@ void main() {
     });
   });
 
+  group('EbikeAccess', () {
+    test('offers yes and no, and nothing else', () {
+      expect(EbikeAccess.values.map((a) => a.osmValue), ['yes', 'no']);
+    });
+
+    test('reads those values back', () {
+      expect(EbikeAccess.fromOsm('yes'), EbikeAccess.allowed);
+      expect(EbikeAccess.fromOsm(' no '), EbikeAccess.notAllowed);
+    });
+
+    test('returns null for access values the picker cannot express', () {
+      // Real access values on real paths, including two Steward deliberately
+      // doesn't offer. The panel shows these raw and read-only rather than
+      // pretending nobody has answered — and never flattens them to "allowed".
+      expect(EbikeAccess.fromOsm('designated'), isNull);
+      expect(EbikeAccess.fromOsm('permissive'), isNull);
+      expect(EbikeAccess.fromOsm('destination'), isNull);
+      expect(EbikeAccess.fromOsm('use_sidepath'), isNull);
+      expect(EbikeAccess.fromOsm(null), isNull);
+      expect(EbikeAccess.fromOsm(''), isNull);
+    });
+
+    test('offers no "clear it" option — that would delete somebody\'s tag', () {
+      expect(EbikeAccess.selectable, EbikeAccess.values);
+      expect(
+        EbikeAccess.selectable.map((a) => a.osmValue),
+        isNot(contains(isEmpty)),
+      );
+    });
+  });
+
+  group('Trail e-bike access', () {
+    Trail trailWith(Map<String, String> tags) =>
+        Trail(osmWayId: 1, tags: tags, isAuthoritative: true);
+
+    test('reads the tag through the picker vocabulary', () {
+      final trail = trailWith({'electric_bicycle': 'no'});
+      expect(trail.electricBicycle, EbikeAccess.notAllowed);
+      expect(trail.hasElectricBicycle, isTrue);
+      expect(trail.hasUnmappedElectricBicycle, isFalse);
+    });
+
+    test('keeps an unmapped value visible rather than calling it absent', () {
+      final trail = trailWith({'electric_bicycle': 'destination'});
+      expect(trail.electricBicycle, isNull);
+      expect(trail.hasElectricBicycle, isTrue);
+      expect(trail.hasUnmappedElectricBicycle, isTrue);
+      expect(trail.rawElectricBicycle, 'destination');
+    });
+
+    test('a trail that says nothing about e-bikes is incomplete', () {
+      final trail = trailWith({'mtb:scale:imba': '2', 'surface': 'ground'});
+      expect(trail.hasElectricBicycle, isFalse);
+      expect(trail.isComplete, isFalse);
+      expect(
+        trailWith({
+          'mtb:scale:imba': '2',
+          'surface': 'ground',
+          'electric_bicycle': 'yes',
+        }).isComplete,
+        isTrue,
+      );
+    });
+  });
+
   group('Trail.fromTileProperties', () {
     final props = <String, Object?>{
       'OSM_ID': 1182960573,
@@ -63,6 +129,7 @@ void main() {
       'highway': 'path',
       'mtb:scale:imba': '3',
       'surface': 'ground',
+      'electric_bicycle': 'no',
       'informal': 'yes',
     };
 
@@ -78,6 +145,7 @@ void main() {
       expect(trail.name, 'Gravy Train');
       expect(trail.difficulty, Difficulty.difficult);
       expect(trail.surface, TrailSurface.naturalDirt);
+      expect(trail.electricBicycle, EbikeAccess.notAllowed);
       expect(trail.isInformal, isTrue);
       expect(trail.isComplete, isTrue);
     });

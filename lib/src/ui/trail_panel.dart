@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../model/difficulty.dart';
+import '../model/electric_bicycle.dart';
 import '../model/staged_edit.dart';
 import '../model/trail.dart';
 import '../state/steward_state.dart';
@@ -10,10 +11,13 @@ import 'fields.dart';
 /// Details for the selected trail, and the guided editor for the attributes
 /// Steward can change.
 ///
-/// Editable attributes carry a pencil; tapping it swaps the value for a picker
-/// with a check (stage it) and an X (discard it). Nothing here reaches
-/// OpenStreetMap — staged edits collect in [StewardState] and go out together
-/// as one changeset from the staged-changes review.
+/// Every editable attribute is a picker, always live: choosing a value stages
+/// it, the way the bulk editor works. There is no pencil to press first and no
+/// check to press after — an edit-mode toggle in front of a three-option
+/// dropdown is two clicks of ceremony around one decision, and nothing here
+/// reaches OpenStreetMap anyway. Staged edits collect in [StewardState], show
+/// as STAGED with an undo beside them, and go out together as one changeset
+/// from the staged-changes review.
 ///
 /// One trail only. Several selected trails get [SelectionPanel] instead, which
 /// applies one value across all of them.
@@ -61,6 +65,8 @@ class TrailPanel extends StatelessWidget {
                 const SizedBox(height: 16),
                 DifficultyField(trail: trail, state: state),
                 const SizedBox(height: 12),
+                ElectricBicycleField(trail: trail, state: state),
+                const SizedBox(height: 12),
                 _SurfaceRow(trail: trail),
                 if (trail.isInformal) ...[
                   const SizedBox(height: 12),
@@ -84,7 +90,8 @@ class TrailPanel extends StatelessWidget {
                 // the thought "I want to do this to the next one too" occurs.
                 _Chip(
                   icon: Icons.done_all,
-                  label: '$multiSelectModifier-click another trail to edit '
+                  label:
+                      '$multiSelectModifier-click another trail to edit '
                       'several at once',
                 ),
                 const SizedBox(height: 12),
@@ -140,13 +147,115 @@ class _SourceLine extends StatelessWidget {
   }
 }
 
-/// Difficulty for one trail, read-only until the pencil is tapped.
+/// Difficulty for one trail: a live picker, not a value with an edit button.
 ///
-/// Public because the in-view list reuses nothing of its chrome but the bulk
-/// editor and this panel both need the same commit rules — those live in
-/// [StewardState.applyDifficulty], which this calls with a list of one.
-class DifficultyField extends StatefulWidget {
-  const DifficultyField({
+/// Public because the bulk editor and this panel both need the same commit
+/// rules — those live in [StewardState.applyDifficulty], which this calls with
+/// a list of one.
+class DifficultyField extends StatelessWidget {
+  const DifficultyField({super.key, required this.trail, required this.state});
+
+  final Trail trail;
+  final StewardState state;
+
+  StagedEdit? get _staged =>
+      state.stagedEditFor(trail.osmWayId, TrailAttribute.difficulty);
+
+  /// What the picker shows: the pending value when there is one, so the rider
+  /// sees the trail as they've just described it. Null when nobody has rated
+  /// it, which is what puts the hint in the picker.
+  ///
+  /// Also null when OSM holds something outside the 0–4 scale — `imba=7` is
+  /// not a rating, and handing the picker a value it doesn't offer is an
+  /// assertion, not a display.
+  Difficulty? get _shown => switch (_staged?.difficulty) {
+    final staged? => staged,
+    null when trail.hasDifficulty && trail.difficulty != Difficulty.unrated =>
+      trail.difficulty,
+    _ => null,
+  };
+
+  /// True when OSM has a `mtb:scale:imba` value that isn't one of the five.
+  bool get _hasUnreadableRating =>
+      trail.hasDifficulty && trail.difficulty == Difficulty.unrated;
+
+  /// Editing is gated on authoritative tags. A changeset composed against tile
+  /// data is built on a version that may already be stale.
+  bool get _canEdit => trail.isAuthoritative;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final staged = _staged;
+    final shown = _shown;
+
+    return Field(
+      label: 'Difficulty',
+      isMissing: !trail.hasDifficulty && staged == null,
+      isStaged: staged != null,
+      trailing: staged == null
+          ? null
+          : IconAction(
+              icon: Icons.undo,
+              tooltip: 'Discard this staged change',
+              onPressed: () =>
+                  state.unstageEdit(trail.osmWayId, TrailAttribute.difficulty),
+            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _WhileReading(
+            isEditable: _canEdit,
+            child: DifficultyDropdown(
+              value: shown,
+              // A list of one: picking the value OSM already holds isn't an
+              // edit, and is how a rider walks back a pending change — the
+              // same rule the bulk editor applies across a hundred trails.
+              onChanged: _canEdit
+                  ? (value) {
+                      if (value != null) state.applyDifficulty([trail], value);
+                    }
+                  : null,
+            ),
+          ),
+          if (staged != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Was ${staged.fromLabel.toLowerCase()}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+          if (shown?.isCommonsOnly ?? false) ...[
+            const SizedBox(height: 6),
+            Text(Difficulty.commonsOnlyNote, style: theme.textTheme.bodySmall),
+          ],
+          if (staged == null && _hasUnreadableRating) ...[
+            const SizedBox(height: 6),
+            Text(
+              'OpenStreetMap holds “${trail.tags[Difficulty.osmKey]}” here, '
+              'which is not a rating on the 0–4 scale. Picking one replaces '
+              'it.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// E-bike permission for one trail, on the same terms as [DifficultyField],
+/// with one of its own.
+///
+/// A trail already answering with a value outside Steward's two options —
+/// `designated`, `permissive`, anything else in the access vocabulary — is
+/// shown read-only. `electric_bicycle` is a single key, so a pick would
+/// *replace* that answer rather than add to it, and `designated` says
+/// everything "allowed" says and more. Steward is not the tool that quietly
+/// throws that away; the note points at an editor that can change it
+/// deliberately.
+class ElectricBicycleField extends StatelessWidget {
+  const ElectricBicycleField({
     super.key,
     required this.trail,
     required this.state,
@@ -155,153 +264,109 @@ class DifficultyField extends StatefulWidget {
   final Trail trail;
   final StewardState state;
 
-  @override
-  State<DifficultyField> createState() => _DifficultyFieldState();
-}
+  StagedEdit? get _staged =>
+      state.stagedEditFor(trail.osmWayId, TrailAttribute.electricBicycle);
 
-class _DifficultyFieldState extends State<DifficultyField> {
-  bool _isEditing = false;
-  Difficulty? _draft;
+  EbikeAccess? get _shown => _staged?.electricBicycle ?? trail.electricBicycle;
 
-  @override
-  void didUpdateWidget(DifficultyField oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // A half-finished edit belongs to the trail it was started on.
-    if (oldWidget.trail.osmWayId != widget.trail.osmWayId) _cancel();
-  }
+  /// See the class doc: a value the picker can't express is not a gap to fill,
+  /// it's an answer to leave alone.
+  bool get _isProtected => trail.hasUnmappedElectricBicycle;
 
-  StagedEdit? get _staged => widget.state.stagedEditFor(
-    widget.trail.osmWayId,
-    TrailAttribute.difficulty,
-  );
-
-  /// What the panel shows: the pending value when there is one, so the rider
-  /// sees the trail as they've just described it.
-  Difficulty get _shown => _staged?.difficulty ?? widget.trail.difficulty;
-
-  /// Editing is gated on authoritative tags. A changeset composed against tile
-  /// data is built on a version that may already be stale.
-  bool get _canEdit => widget.trail.isAuthoritative;
-
-  void _startEditing() => setState(() {
-    _isEditing = true;
-    _draft = widget.trail.hasDifficulty || _staged != null ? _shown : null;
-  });
-
-  void _cancel() => setState(() {
-    _isEditing = false;
-    _draft = null;
-  });
-
-  void _commit() {
-    final draft = _draft;
-    if (draft == null) return;
-    setState(() {
-      _isEditing = false;
-      _draft = null;
-    });
-    // A list of one: picking the value OSM already holds isn't an edit, and is
-    // how a rider walks back a pending change — the same rule the bulk editor
-    // applies across a hundred trails.
-    widget.state.applyDifficulty([widget.trail], draft);
-  }
+  bool get _canEdit => trail.isAuthoritative && !_isProtected;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final staged = _staged;
+    final shown = _shown;
 
     return Field(
-      label: 'Difficulty',
-      isMissing: !widget.trail.hasDifficulty && staged == null,
+      label: 'E-bike access',
+      isMissing: !trail.hasElectricBicycle && staged == null,
       isStaged: staged != null,
-      trailing: _isEditing
+      trailing: staged == null
           ? null
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (staged != null)
-                  IconAction(
-                    icon: Icons.undo,
-                    tooltip: 'Discard this staged change',
-                    onPressed: () => widget.state.unstageEdit(
-                      widget.trail.osmWayId,
-                      TrailAttribute.difficulty,
-                    ),
-                  ),
-                IconAction(
-                  icon: Icons.edit_outlined,
-                  tooltip: _canEdit
-                      ? 'Edit difficulty'
-                      : 'Waiting for the latest tags from OpenStreetMap',
-                  onPressed: _canEdit ? _startEditing : null,
-                ),
-              ],
-            ),
-      child: _isEditing ? _buildEditor(theme) : _buildValue(theme, staged),
-    );
-  }
-
-  Widget _buildValue(ThemeData theme, StagedEdit? staged) {
-    final hasValue = widget.trail.hasDifficulty || staged != null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            DifficultyIcon(_shown),
-            const SizedBox(width: 10),
-            Text(hasValue ? _shown.label : 'Not rated yet'),
-          ],
-        ),
-        if (staged != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            'Was ${staged.fromLabel.toLowerCase()}',
-            style: theme.textTheme.bodySmall,
-          ),
-          if (staged.note case final note?) ...[
-            const SizedBox(height: 4),
-            Text(note, style: theme.textTheme.bodySmall),
-          ],
-        ],
-      ],
-    );
-  }
-
-  Widget _buildEditor(ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: DifficultyDropdown(
-                value: _draft,
-                onChanged: (d) => setState(() => _draft = d),
+          : IconAction(
+              icon: Icons.undo,
+              tooltip: 'Discard this staged change',
+              onPressed: () => state.unstageEdit(
+                trail.osmWayId,
+                TrailAttribute.electricBicycle,
               ),
             ),
-            const SizedBox(width: 2),
-            IconAction(
-              icon: Icons.check,
-              tooltip: 'Stage this change',
-              onPressed: _draft == null ? null : _commit,
-              emphasised: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_isProtected)
+            // Not a disabled picker: there is nothing here for a rider to do,
+            // and a greyed-out dropdown reads as "wait" rather than "this one
+            // is already answered".
+            Row(
+              children: [
+                const EbikeIcon(null),
+                const SizedBox(width: 8),
+                Expanded(child: Text(trail.rawElectricBicycle!)),
+              ],
+            )
+          else
+            _WhileReading(
+              isEditable: _canEdit,
+              child: ElectricBicycleDropdown(
+                value: shown,
+                hint: 'Not recorded',
+                onChanged: _canEdit
+                    ? (value) {
+                        if (value != null) {
+                          state.applyElectricBicycle([trail], value);
+                        }
+                      }
+                    : null,
+              ),
             ),
-            IconAction(
-              icon: Icons.close,
-              tooltip: 'Discard',
-              onPressed: _cancel,
+          if (staged != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Was ${staged.fromLabel.toLowerCase()}',
+              style: theme.textTheme.bodySmall,
             ),
           ],
-        ),
-        if (_draft?.isCommonsOnly ?? false) ...[
           const SizedBox(height: 6),
-          Text(Difficulty.commonsOnlyNote, style: theme.textTheme.bodySmall),
+          // What the current answer actually claims, in the same words the
+          // picker used to offer it. "Allowed" and "e-bike trail" are a
+          // distinction that has to survive the menu closing.
+          Text(switch ((shown, _isProtected)) {
+            (final access?, _) => access.description,
+            (null, true) =>
+              'OpenStreetMap already answers this with '
+                  '“${trail.rawElectricBicycle}”, which says more than either '
+                  'of Steward\'s options. Steward leaves it alone rather than '
+                  'replacing it — change it in a full editor if it\'s wrong.',
+            _ => EbikeAccess.pickerNote,
+          }, style: theme.textTheme.bodySmall),
         ],
-      ],
+      ),
     );
   }
+}
+
+/// Says why a picker is disabled, and gets out of the way once it isn't.
+///
+/// Every field is gated on the same thing — authoritative tags — so the
+/// explanation is one sentence written in one place rather than per field.
+class _WhileReading extends StatelessWidget {
+  const _WhileReading({required this.isEditable, required this.child});
+
+  final bool isEditable;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => isEditable
+      ? child
+      : Tooltip(
+          message: 'Waiting for the latest tags from OpenStreetMap',
+          child: child,
+        );
 }
 
 class _SurfaceRow extends StatelessWidget {

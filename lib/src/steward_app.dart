@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'map/steward_map_view.dart';
 import 'state/steward_state.dart';
+import 'ui/account_button.dart';
 import 'ui/legend.dart';
 import 'ui/map_controls.dart';
 import 'ui/selection_panel.dart';
@@ -113,25 +114,32 @@ class _MapOverlays extends StatelessWidget {
           // The legend and the list both want the bottom-left corner, and the
           // list is the one someone is actively reading.
           if (!state.isTrailListOpen)
-            Positioned(
-              bottom: 16,
-              left: 16,
-              child: Legend(state: state),
+            Positioned(bottom: 16, left: 16, child: Legend(state: state)),
+          Positioned(
+            top: 16,
+            right: 16,
+            bottom: 16,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Above the editor, and present whether or not anything is
+                // selected: who you're about to write as is not a detail of
+                // the current selection.
+                AccountButton(state: state),
+                if (state.hasSelection) ...[
+                  const SizedBox(height: 12),
+                  // One trail gets the detail view; several get the bulk
+                  // editor, which applies one value across all of them.
+                  Flexible(
+                    child: state.hasMultiSelection
+                        ? SelectionPanel(state: state)
+                        : TrailPanel(state: state),
+                  ),
+                ],
+              ],
             ),
-          if (state.hasSelection)
-            Positioned(
-              top: 16,
-              right: 16,
-              bottom: 16,
-              child: Align(
-                alignment: Alignment.topRight,
-                // One trail gets the detail view; several get the bulk editor,
-                // which applies one value across all of them.
-                child: state.hasMultiSelection
-                    ? SelectionPanel(state: state)
-                    : TrailPanel(state: state),
-              ),
-            ),
+          ),
         ],
       ),
     );

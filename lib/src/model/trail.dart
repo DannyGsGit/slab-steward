@@ -1,4 +1,6 @@
+import '../osm/osm_environment.dart';
 import 'difficulty.dart';
+import 'electric_bicycle.dart';
 import 'surface.dart';
 
 /// A trail as Steward knows it.
@@ -37,9 +39,7 @@ class Trail {
     );
   }
 
-  static const _tileOnlyKeys = {
-    'MIN_LAT', 'MAX_LAT', 'MIN_LON', 'MAX_LON',
-  };
+  static const _tileOnlyKeys = {'MIN_LAT', 'MAX_LAT', 'MIN_LON', 'MAX_LON'};
 
   final int osmWayId;
 
@@ -75,12 +75,28 @@ class Trail {
   /// read-only rather than silently reported as missing.
   bool get hasUnmappedSurface => rawSurface != null && surface == null;
 
+  String? get rawElectricBicycle => tags[EbikeAccess.osmKey];
+
+  EbikeAccess? get electricBicycle => EbikeAccess.fromOsm(rawElectricBicycle);
+
+  /// Whether OSM says anything at all about e-bikes here.
+  bool get hasElectricBicycle => tags.containsKey(EbikeAccess.osmKey);
+
+  /// An access value OSM knows about but SLAB's picker can't express — shown
+  /// read-only, the same as an unmapped surface.
+  bool get hasUnmappedElectricBicycle =>
+      rawElectricBicycle != null && electricBicycle == null;
+
   bool get isInformal => tags['informal'] == 'yes';
 
-  /// Complete in the sense the completeness lens means it.
-  bool get isComplete => hasDifficulty && rawSurface != null;
+  /// Complete in the sense all three attribute lenses together mean it: every
+  /// attribute Steward can write has an answer.
+  bool get isComplete =>
+      hasDifficulty && rawSurface != null && hasElectricBicycle;
 
-  String get osmUrl => 'https://www.openstreetmap.org/way/$osmWayId';
+  /// Built from [osmWebHost], not the API host: `/way/{id}` is served by the
+  /// website, and the two are different machines.
+  String get osmUrl => '$osmWebHost/way/$osmWayId';
 
   Trail mergeAuthoritative({
     required Map<String, String> tags,

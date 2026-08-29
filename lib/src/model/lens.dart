@@ -1,4 +1,4 @@
-/// Which trails are drawn, and what question the colouring answers.
+/// Which trails are drawn, and what questions the colouring answers.
 ///
 /// Both concepts come straight from OpenTrailMap: a travel mode decides what is
 /// shown, a lens decides how it is coloured. Steward ships a narrow slice of
@@ -21,43 +21,51 @@ enum TravelMode {
   final String? osmKey;
 }
 
+/// One question the map can ask of a trail.
+///
+/// Lenses combine rather than compete: the rider picks any number of them, and
+/// a trail is only "done" when it answers all of them. That is what used to be
+/// a single fixed "Missing any" lens — selecting the three attribute lenses
+/// together is exactly it — and selecting none of them is the plain map.
 enum Lens {
-  /// No question asked; every trail renders in the plain OpenTrailMap brown.
-  none('Plain', []),
-
   /// Purple where OSM doesn't say whether the current travel mode is allowed.
   /// Meaningless without a mode, so the UI hides it under [TravelMode.all].
-  access('Unknown access', []),
+  access('Unknown access', 'access', []),
 
   /// Does this trail have an IMBA difficulty rating?
-  difficulty('Missing difficulty', ['mtb:scale:imba']),
+  difficulty('Missing difficulty', 'difficulty', ['mtb:scale:imba']),
 
   /// Does this trail have a surface?
-  surface('Missing surface', ['surface']),
+  surface('Missing surface', 'surface', ['surface']),
 
-  /// Steward's own composite: a trail is complete when it has both.
-  /// This is the "completeness indicator" of the product description §2.
-  completeness('Missing either', ['mtb:scale:imba', 'surface']);
+  /// Does this trail say whether e-bikes may ride it?
+  electricBicycle('Missing e-bike access', 'e-bike rule', ['electric_bicycle']);
 
-  const Lens(this.label, this.keys);
+  const Lens(this.label, this.noun, this.keys);
 
+  /// How the picker names the lens.
   final String label;
 
-  /// The OSM keys this lens inspects. Empty for [none] and [access], which ask
-  /// about access rather than about an attribute.
+  /// What the legend calls the thing the lens looks for, as a bare noun so it
+  /// reads inside a list: "Missing difficulty, surface or e-bike rule".
+  final String noun;
+
+  /// The OSM keys this lens inspects. Empty for [access], which asks about
+  /// access rather than about an attribute.
   final List<String> keys;
+}
 
-  /// Whether trails that fail the lens draw in purple. [none] asks nothing, so
-  /// nothing is ever purple.
-  bool get showsUnspecified => this != Lens.none;
+/// The set of lenses currently applied, and what it implies for the map.
+extension LensSelection on Iterable<Lens> {
+  /// The selection in enum order, so the legend and the picker list it the
+  /// same way however it was assembled.
+  List<Lens> get inOrder => [
+    for (final lens in Lens.values)
+      if (contains(lens)) lens,
+  ];
 
-  /// Whether passing the lens recolours the trail teal. Attribute lenses say
-  /// "this one is done"; [access] leaves passing trails in plain brown, the way
-  /// OpenTrailMap does.
-  bool get tintsSpecified => keys.isNotEmpty;
-
-  /// [completeness] needs *every* key present; the single-attribute lenses need
-  /// only their one key. This is the one place Steward diverges from
-  /// OpenTrailMap, whose attribute lenses are all any-of.
-  bool get requiresAllKeys => this == Lens.completeness;
+  /// Whether passing every selected lens recolours the trail teal. Attribute
+  /// lenses say "this one is done"; [Lens.access] on its own leaves passing
+  /// trails in plain brown, the way OpenTrailMap does.
+  bool get tintsSpecified => any((lens) => lens.keys.isNotEmpty);
 }

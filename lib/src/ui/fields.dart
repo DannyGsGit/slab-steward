@@ -2,9 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../model/difficulty.dart';
+import '../model/electric_bicycle.dart';
 
 /// The small shared vocabulary the editors are built from: a labelled row, the
-/// MISSING / STAGED markers, a compact icon button, and the difficulty picker.
+/// MISSING / STAGED markers, a compact icon button, and the guided pickers.
 ///
 /// These live apart from any one panel because the single-trail panel, the
 /// in-view list and the bulk editor all have to read as the same editor —
@@ -42,9 +43,14 @@ class Field extends StatelessWidget {
           height: 24,
           child: Row(
             children: [
-              Text(
-                label.toUpperCase(),
-                style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 0.8),
+              Flexible(
+                child: Text(
+                  label.toUpperCase(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    letterSpacing: 0.8,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               if (isMissing) ...[
                 const SizedBox(width: 8),
@@ -151,13 +157,119 @@ class DifficultyDropdown extends StatelessWidget {
   final Difficulty? value;
 
   /// Null disables the picker — a batch that is mid-apply must not be
-  /// re-pointed underneath itself.
+  /// re-pointed underneath itself, and neither must a trail whose
+  /// authoritative tags are still being read.
   final ValueChanged<Difficulty?>? onChanged;
   final String hint;
 
   @override
   Widget build(BuildContext context) {
+    return GuidedDropdown<Difficulty>(
+      value: value,
+      onChanged: onChanged,
+      hint: hint,
+      options: [
+        for (final difficulty in Difficulty.selectable)
+          PickerOption(
+            difficulty,
+            label: difficulty.label,
+            glyph: DifficultyIcon(difficulty, size: 14),
+          ),
+      ],
+    );
+  }
+}
+
+/// The e-bike permission picker.
+///
+/// Every option carries its meaning, because "allowed" and "e-bike trail" are
+/// a distinction a rider can only get right if it's spelled out at the moment
+/// of choosing. See [EbikeAccess].
+class ElectricBicycleDropdown extends StatelessWidget {
+  const ElectricBicycleDropdown({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.hint = 'Choose a permission',
+  });
+
+  final EbikeAccess? value;
+  final ValueChanged<EbikeAccess?>? onChanged;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return GuidedDropdown<EbikeAccess>(
+      value: value,
+      onChanged: onChanged,
+      hint: hint,
+      options: [
+        for (final access in EbikeAccess.selectable)
+          PickerOption(
+            access,
+            label: access.label,
+            glyph: EbikeIcon(access, size: 15),
+            description: access.description,
+          ),
+      ],
+    );
+  }
+}
+
+/// One option in a guided picker: what it's worth, what to call it, what it
+/// looks like, and — where the label alone can be misread — what it means.
+class PickerOption<T> {
+  const PickerOption(
+    this.value, {
+    required this.label,
+    required this.glyph,
+    this.description,
+  });
+
+  final T value;
+  final String label;
+  final Widget glyph;
+
+  /// A line of plain language shown under [label] in the open menu. Null for
+  /// options whose label is already unambiguous — a black diamond needs no
+  /// gloss.
+  final String? description;
+}
+
+/// The shared shape of every guided picker: a bordered, dense dropdown whose
+/// options each carry a glyph, a plain-language label, and optionally a line
+/// saying what the option actually claims.
+///
+/// The closed field stays one line whatever the options do — the explanation
+/// is there to be read while choosing, not to double the height of a panel
+/// that has already been answered.
+class GuidedDropdown<T> extends StatelessWidget {
+  const GuidedDropdown({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.options,
+    required this.hint,
+  });
+
+  final T? value;
+
+  /// Null disables the picker.
+  final ValueChanged<T?>? onChanged;
+
+  /// In the order the picker offers them.
+  final List<PickerOption<T>> options;
+
+  final String hint;
+
+  /// Menu rows have to be tall enough for a wrapped second line; a picker
+  /// whose options are all one-liners keeps the default row height.
+  static const _describedItemHeight = 76.0;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final described = options.any((o) => o.description != null);
     return InputDecorator(
       decoration: const InputDecoration(
         isDense: true,
@@ -165,26 +277,54 @@ class DifficultyDropdown extends StatelessWidget {
         contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
       child: DropdownButtonHideUnderline(
-        child: DropdownButton<Difficulty>(
+        child: DropdownButton<T>(
           value: value,
           isDense: true,
           isExpanded: true,
-          hint: Text(hint, style: theme.textTheme.bodyMedium),
+          itemHeight: described
+              ? _describedItemHeight
+              : kMinInteractiveDimension,
+          hint: Text(
+            hint,
+            style: theme.textTheme.bodyMedium,
+            overflow: TextOverflow.ellipsis,
+          ),
           onChanged: onChanged,
+          // The closed field shows the label alone. Without this the button
+          // would wear the whole two-line menu row.
+          selectedItemBuilder: (context) => [
+            for (final option in options)
+              Row(
+                children: [
+                  option.glyph,
+                  const SizedBox(width: 8),
+                  _label(option),
+                ],
+              ),
+          ],
           items: [
-            for (final difficulty in Difficulty.selectable)
+            for (final option in options)
               DropdownMenuItem(
-                value: difficulty,
-                child: Row(
+                value: option.value,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    DifficultyIcon(difficulty, size: 14),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        difficulty.label,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    Row(
+                      children: [
+                        option.glyph,
+                        const SizedBox(width: 8),
+                        _label(option),
+                      ],
                     ),
+                    if (option.description case final description?) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        description,
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 2,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -193,6 +333,9 @@ class DifficultyDropdown extends StatelessWidget {
       ),
     );
   }
+
+  Widget _label(PickerOption<T> option) =>
+      Flexible(child: Text(option.label, overflow: TextOverflow.ellipsis));
 }
 
 /// What to call the multi-select modifier in front of the user.

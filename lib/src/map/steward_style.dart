@@ -8,6 +8,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:http/http.dart' as http;
+
 import '../model/lens.dart';
 import 'otm_conventions.dart';
 
@@ -57,43 +59,90 @@ const overlayMinZoom = 10.0;
 
 const _emptyFeatureCollection = '{"type":"FeatureCollection","features":[]}';
 
-final Expr _lineWidth = ['interpolate', ['linear'], ['zoom'], 12, 1, 22, 5];
-final Expr _selectedLineWidth = ['interpolate', ['linear'], ['zoom'], 12, 9, 22, 13];
+final Expr _lineWidth = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  12,
+  1,
+  22,
+  5,
+];
+final Expr _selectedLineWidth = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  12,
+  9,
+  22,
+  13,
+];
 
 /// The glow is drawn as two blurred lines rather than one: the wide outer
 /// wash is what catches the eye from across the map, and the tighter inner
 /// pass keeps the trail's own line from looking washed out at close zoom.
-final Expr _stagedGlowWidth = ['interpolate', ['linear'], ['zoom'], 12, 14, 22, 28];
-final Expr _stagedCoreWidth = ['interpolate', ['linear'], ['zoom'], 12, 7, 22, 15];
+final Expr _stagedGlowWidth = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  12,
+  14,
+  22,
+  28,
+];
+final Expr _stagedCoreWidth = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  12,
+  7,
+  22,
+  15,
+];
 
 /// Everything a set of overlay layers is built from, resolved once per
-/// (mode, lens) pair.
+/// (mode, selection) pair.
 class _OverlayContext {
-  _OverlayContext(this.mode, this.lens);
+  _OverlayContext(this.mode, this.lenses, this.tags);
 
   final TravelMode mode;
-  final Lens lens;
+
+  /// The questions being asked. A trail has to answer all of them to pass.
+  final Set<Lens> lenses;
+
+  /// Where the filters read tags from — the tileset, or the tileset corrected
+  /// by what Steward has since read or written.
+  final TagSource tags;
 
   /// Trails the chosen mode is allowed on.
   late final Expr allowed = switch (mode.osmKey) {
     null => ['literal', true],
-    final key => modeIsAllowed(key),
+    final key => modeIsAllowed(key, tags),
   };
 
-  /// Whether the trail answers the lens' question.
-  late final Expr specified = switch (lens) {
-    Lens.none => ['literal', true],
-    Lens.access => switch (mode.osmKey) {
-      null => ['literal', true],
-      final key => accessIsSpecified(key),
-    },
-    _ => lens.requiresAllKeys
-        ? ['all', for (final k in lens.keys) attributeIsSpecified([k])]
-        : attributeIsSpecified(lens.keys),
+  /// One test per question the selection actually asks. [Lens.access] under
+  /// [TravelMode.all] asks nothing, so it contributes nothing.
+  late final List<Expr> _tests = [
+    for (final lens in lenses.inOrder)
+      if (lens == Lens.access) ...[
+        if (mode.osmKey case final key?) accessIsSpecified(key, tags),
+      ] else
+        for (final key in lens.keys) attributeIsSpecified([key], tags),
+  ];
+
+  /// Whether the trail answers every selected lens' question.
+  ///
+  /// All-of, so stacking lenses narrows: this is what the old fixed
+  /// "Missing any" lens did across its three keys, generalised to whatever the
+  /// rider has ticked.
+  late final Expr specified = switch (_tests) {
+    [] => ['literal', true],
+    [final only] => only,
+    final tests => ['all', ...tests],
   };
 
-  /// Colour for trails that pass the lens.
-  String get passColor => lens.tintsSpecified ? specifiedColor : trailColor;
+  /// Colour for trails that pass every selected lens.
+  String get passColor => lenses.tintsSpecified ? specifiedColor : trailColor;
 
   /// OpenTrailMap hides trails the chosen mode can't use. Steward shows them
   /// pale and marked instead — the same visual vocabulary, but a steward still
@@ -101,34 +150,54 @@ class _OverlayContext {
   /// trail can't be clicked.
   bool get showsDisallowed => mode.osmKey != null;
 
-  bool get showsUnspecified => lens.showsUnspecified;
+  /// Nothing is purple when nothing is being asked.
+  bool get showsUnspecified => _tests.isNotEmpty;
 }
 
 /// Per-layer filters. The union of these is what labels and hit targets use.
 Map<String, Expr> _trailFilters(_OverlayContext ctx) {
-  final informal = <Object?>['==', ['get', 'informal'], 'yes'];
-  final formal = <Object?>['!=', ['get', 'informal'], 'yes'];
+  final informal = <Object?>['==', ctx.tags.get('informal'), 'yes'];
+  final formal = <Object?>['!=', ctx.tags.get('informal'), 'yes'];
   final allowed = ctx.allowed;
   final specified = ctx.specified;
   final disallowed = <Object?>['!', allowed];
+  final isHighwayExpr = isHighway(ctx.tags);
 
   return {
-    'paths': ['all', isHighway, allowed, specified, formal],
-    'informal-paths': ['all', isHighway, allowed, specified, informal],
+    'paths': ['all', isHighwayExpr, allowed, specified, formal],
+    'informal-paths': ['all', isHighwayExpr, allowed, specified, informal],
     // Deliberately not filtered by [specified]: "you can't ride here" outranks
     // "the data is missing", and a trail that matched neither condition would
     // fall through every layer and vanish off the map.
     'disallowed-paths': [
-      'all', ctx.showsDisallowed, isHighway, disallowed, formal,
+      'all',
+      ctx.showsDisallowed,
+      isHighwayExpr,
+      disallowed,
+      formal,
     ],
     'disallowed-informal-paths': [
-      'all', ctx.showsDisallowed, isHighway, disallowed, informal,
+      'all',
+      ctx.showsDisallowed,
+      isHighwayExpr,
+      disallowed,
+      informal,
     ],
     'unspecified-paths': [
-      'all', ctx.showsUnspecified, isHighway, allowed, ['!', specified], formal,
+      'all',
+      ctx.showsUnspecified,
+      isHighwayExpr,
+      allowed,
+      ['!', specified],
+      formal,
     ],
     'unspecified-informal-paths': [
-      'all', ctx.showsUnspecified, isHighway, allowed, ['!', specified], informal,
+      'all',
+      ctx.showsUnspecified,
+      isHighwayExpr,
+      allowed,
+      ['!', specified],
+      informal,
     ],
   };
 }
@@ -183,7 +252,15 @@ List<Map<String, Object?>> _trailLayers(
       'bridge-casings',
       {
         'line-gap-width': _lineWidth,
-        'line-width': ['interpolate', ['linear'], ['zoom'], 16, 2, 20, 6],
+        'line-width': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          16,
+          2,
+          20,
+          6,
+        ],
         'line-color': bridgeCasingColor,
       },
       {
@@ -191,13 +268,16 @@ List<Map<String, Object?>> _trailLayers(
         'layout': {'line-cap': 'butt', 'line-join': 'round'},
         'filter': [
           'all',
-          ['has', 'bridge'],
+          ctx.tags.has('bridge'),
           [
             '!',
             [
               'in',
-              ['get', 'bridge'],
-              ['literal', ['no', 'abandoned', 'raised', 'proposed', 'dismantled']],
+              ctx.tags.get('bridge'),
+              [
+                'literal',
+                ['no', 'abandoned', 'raised', 'proposed', 'dismantled'],
+              ],
             ],
           ],
           combinedFilter,
@@ -246,7 +326,12 @@ List<Map<String, Object?>> _trailLayers(
       'source-layer': _trailsSourceLayer,
       'type': 'symbol',
       'minzoom': 13,
-      'filter': ['all', ctx.showsDisallowed, ['!', ctx.allowed], combinedFilter],
+      'filter': [
+        'all',
+        ctx.showsDisallowed,
+        ['!', ctx.allowed],
+        combinedFilter,
+      ],
       'layout': {
         'symbol-placement': 'line',
         'symbol-spacing': 200,
@@ -269,7 +354,7 @@ List<Map<String, Object?>> _trailLayers(
       'source-layer': _trailsSourceLayer,
       'type': 'symbol',
       'minzoom': 14,
-      'filter': ['all', ['has', 'name'], combinedFilter],
+      'filter': ['all', ctx.tags.has('name'), combinedFilter],
       'layout': {
         'text-field': ['get', 'name'],
         'text-font': ['Noto Sans Regular'],
@@ -294,6 +379,24 @@ List<Map<String, Object?>> _trailLayers(
   ];
 }
 
+/// The planet-build timestamp the trail tileset was cut from, or null if the
+/// TileJSON can't be read or doesn't say.
+///
+/// Published by planetiler in the TileJSON as `timestamp`, and typically some
+/// days behind live OSM — which is the whole reason [TagSource.overriding]
+/// exists, and the clock an override is measured against.
+Future<DateTime?> fetchTilesetBuiltAt() async {
+  try {
+    final response = await http.get(Uri.parse(_trailsTileJsonUrl));
+    if (response.statusCode != 200) return null;
+    final stamp =
+        (jsonDecode(response.body) as Map<String, Object?>)['timestamp'];
+    return stamp is String ? DateTime.parse(stamp).toUtc() : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Splices Steward's trail overlay into [baseStyle] and returns the result as a
 /// style document ready to hand to MapLibre.
 ///
@@ -301,7 +404,8 @@ List<Map<String, Object?>> _trailLayers(
 Map<String, Object?> buildStewardStyle(
   Map<String, Object?> baseStyle, {
   required TravelMode mode,
-  required Lens lens,
+  required Set<Lens> lenses,
+  TagSource tags = const TagSource.tiles(),
 }) {
   final sources = baseStyle['sources'] as Map<String, Object?>;
   sources[_trailsSourceId] = {
@@ -309,7 +413,7 @@ Map<String, Object?> buildStewardStyle(
     'url': _trailsTileJsonUrl,
     'attribution':
         'Trails © <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> '
-        'contributors · tiles by <a href="https://openstreetmap.us">OpenStreetMap US</a>',
+        'contributors, tiles by <a href="https://openstreetmap.us">OpenStreetMap US</a>',
   };
   for (final id in [selectionSourceId, stagedSourceId]) {
     sources[id] = {
@@ -330,17 +434,33 @@ Map<String, Object?> buildStewardStyle(
     }
   }
 
-  final ctx = _OverlayContext(mode, lens);
+  final ctx = _OverlayContext(mode, lenses, tags);
   final filters = _trailFilters(ctx);
-  final combinedFilter = <Object?>['any', ...filters.values];
 
-  final overlay = _trailLayers(ctx, filters, combinedFilter)
-      .map((layer) => {'minzoom': overlayMinZoom, ...layer})
-      .toList();
+  // What the overlay draws, for the layers that need to cover all of it —
+  // labels, hit targets, bridge casings, the no-entry symbols.
+  //
+  // The obvious spelling is `['any', ...filters.values]`, and that is what
+  // this was. But the six line layers *partition* the trails — allowed and
+  // specified, allowed and not, and disallowed — so their union has always
+  // been exactly this, and spelling it out cost the four layers below a
+  // verbatim copy of all six filters each. Harmless when a filter is a dozen
+  // bytes; with [TagSource.overriding] substituting tags into every one of
+  // them, it was 80% of the style document. `lens_override_test.dart` holds
+  // the two spellings to each other.
+  final combinedFilter = isHighway(ctx.tags);
+
+  final overlay = _trailLayers(
+    ctx,
+    filters,
+    combinedFilter,
+  ).map((layer) => {'minzoom': overlayMinZoom, ...layer}).toList();
 
   final insertionIndex = layers.indexWhere((l) => l['id'] == _qaInsertionPoint);
   if (insertionIndex < 0) {
-    throw StateError('Base style is missing its "$_qaInsertionPoint" marker layer');
+    throw StateError(
+      'Base style is missing its "$_qaInsertionPoint" marker layer',
+    );
   }
   layers.insertAll(insertionIndex, overlay);
 

@@ -30,7 +30,8 @@ class TrailListPanel extends StatefulWidget {
 enum _ListFilter {
   all('All'),
   missingDifficulty('No rating'),
-  missingSurface('No surface');
+  missingSurface('No surface'),
+  missingElectricBicycle('No e-bike rule');
 
   const _ListFilter(this.label);
 
@@ -40,6 +41,7 @@ enum _ListFilter {
     _ListFilter.all => true,
     _ListFilter.missingDifficulty => !trail.hasDifficulty,
     _ListFilter.missingSurface => trail.rawSurface == null,
+    _ListFilter.missingElectricBicycle => !trail.hasElectricBicycle,
   };
 }
 
@@ -59,7 +61,9 @@ class _TrailListPanelState extends State<TrailListPanel> {
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        width: 360,
+        // Wide enough to carry a name, its answer, and a live picker on one
+        // line. See [_TrailRow].
+        width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -121,15 +125,12 @@ class _TrailListPanelState extends State<TrailListPanel> {
     if (trails.isEmpty) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        child: Text(
-          switch ((widget.state.hasListedVisibleTrails, _filter)) {
-            (false, _) => 'Reading the map…',
-            (_, _ListFilter.all) =>
-              'No trails in view. Pan or zoom in until some appear.',
-            _ => 'Every trail in view already answers that question.',
-          },
-          style: theme.textTheme.bodyMedium,
-        ),
+        child: Text(switch ((widget.state.hasListedVisibleTrails, _filter)) {
+          (false, _) => 'Reading the map…',
+          (_, _ListFilter.all) =>
+            'No trails in view. Pan or zoom in until some appear.',
+          _ => 'Every trail in view already answers that question.',
+        }, style: theme.textTheme.bodyMedium),
       );
     }
     return ListView.builder(
@@ -203,8 +204,12 @@ class _SelectAllRow extends StatelessWidget {
   }
 }
 
-/// One trail in the list: tick it into the working set, or edit its rating
-/// right here without leaving the list.
+/// One trail in the list: tick it into the working set, or rate it right here
+/// without leaving the list.
+///
+/// The picker is live, the same as the one in the detail panel — a list is a
+/// place to work through twelve trails quickly, and a pencil in front of every
+/// row is twelve extra clicks buying nothing.
 class _TrailRow extends StatefulWidget {
   const _TrailRow({super.key, required this.trail, required this.state});
 
@@ -216,48 +221,29 @@ class _TrailRow extends StatefulWidget {
 }
 
 class _TrailRowState extends State<_TrailRow> {
-  bool _isEditing = false;
-  Difficulty? _draft;
+  /// True while this row's OSM read is in flight.
+  bool _isResolving = false;
 
   StagedEdit? get _staged => widget.state.stagedEditFor(
     widget.trail.osmWayId,
     TrailAttribute.difficulty,
   );
 
-  Difficulty get _shown => _staged?.difficulty ?? widget.trail.difficulty;
-
-  /// The list is built from tile data, so a row usually has no authoritative
-  /// tags until someone asks to edit it. Fetching all of them up front would
-  /// be one OSM API call per trail on screen; fetching this one, now, is the
-  /// same gate the panel applies, just asked at the moment of intent.
-  Future<void> _startEditing() async {
-    setState(() {
-      _isEditing = true;
-      _draft = null;
-    });
-    await widget.state.ensureAuthoritative(widget.trail.osmWayId);
-    if (!mounted || !_isEditing) return;
-    final trail = widget.state.trailFor(widget.trail.osmWayId);
-    if (trail == null || !trail.isAuthoritative) return;
-    setState(() {
-      _draft = trail.hasDifficulty || _staged != null ? _shown : null;
-    });
+  Difficulty? get _shown {
+    final staged = _staged?.difficulty;
+    if (staged != null) return staged;
+    final trail = widget.state.trailFor(widget.trail.osmWayId) ?? widget.trail;
+    return trail.hasDifficulty ? trail.difficulty : null;
   }
 
-  void _cancel() => setState(() {
-    _isEditing = false;
-    _draft = null;
-  });
-
-  void _commit() {
-    final draft = _draft;
-    final trail = widget.state.trailFor(widget.trail.osmWayId);
-    if (draft == null || trail == null) return;
-    setState(() {
-      _isEditing = false;
-      _draft = null;
-    });
-    widget.state.applyDifficulty([trail], draft);
+  /// The list is built from tile data, so a row usually has no authoritative
+  /// tags until someone picks a value on it. Fetching all of them up front
+  /// would be one OSM API call per trail on screen; fetching this one, now, is
+  /// the same gate the panel applies, just asked at the moment of intent.
+  Future<void> _pick(Difficulty value) async {
+    setState(() => _isResolving = true);
+    await widget.state.setDifficulty(widget.trail.osmWayId, value);
+    if (mounted) setState(() => _isResolving = false);
   }
 
   @override
@@ -277,132 +263,81 @@ class _TrailRowState extends State<_TrailRow> {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 2, 8, 6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+        child: Row(
           children: [
-            Row(
-              children: [
-                Checkbox(
-                  value: state.isSelected(trail.osmWayId),
-                  onChanged: (checked) =>
-                      state.setSelected(trail.osmWayId, checked ?? false),
-                ),
-                DifficultyIcon(_shown, size: 14),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        trail.name ?? 'Unnamed trail',
-                        style: theme.textTheme.bodyMedium,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        _subtitle(trail, staged),
-                        style: theme.textTheme.bodySmall,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                if (staged != null) ...[
-                  const StatusBadge.staged(),
-                  const SizedBox(width: 2),
-                ],
-                if (!_isEditing) ...[
-                  if (staged != null)
-                    IconAction(
-                      icon: Icons.undo,
-                      tooltip: 'Discard this staged change',
-                      onPressed: () => state.unstageEdit(
-                        trail.osmWayId,
-                        TrailAttribute.difficulty,
-                      ),
-                    ),
-                  IconAction(
-                    icon: Icons.edit_outlined,
-                    tooltip: 'Edit difficulty',
-                    onPressed: _startEditing,
-                  ),
-                ],
-              ],
+            Checkbox(
+              value: state.isSelected(trail.osmWayId),
+              onChanged: (checked) =>
+                  state.setSelected(trail.osmWayId, checked ?? false),
             ),
-            if (_isEditing) ...[
-              const SizedBox(height: 4),
-              _buildEditor(theme, trail),
-              const SizedBox(height: 4),
-            ],
+            Expanded(child: _buildLabel(theme, trail, staged)),
+            if (staged != null)
+              IconAction(
+                icon: Icons.undo,
+                tooltip: 'Discard this staged change',
+                onPressed: () => state.unstageEdit(
+                  trail.osmWayId,
+                  TrailAttribute.difficulty,
+                ),
+              ),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 150,
+              child: DifficultyDropdown(
+                value: _shown,
+                hint: 'Rate it',
+                onChanged: _isResolving
+                    ? null
+                    : (value) {
+                        if (value != null) _pick(value);
+                      },
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildEditor(ThemeData theme, Trail trail) {
+  Widget _buildLabel(ThemeData theme, Trail trail, StagedEdit? staged) {
     final error = widget.state.readErrorFor(trail.osmWayId);
-    if (!trail.isAuthoritative) {
-      return Row(
-        children: [
-          const SizedBox(width: 40),
-          Expanded(
-            child: Text(
-              error ?? 'Reading the latest tags from OpenStreetMap…',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: error == null ? null : theme.colorScheme.error,
-              ),
-            ),
-          ),
-          IconAction(
-            icon: Icons.close,
-            tooltip: 'Discard',
-            onPressed: _cancel,
-          ),
-        ],
-      );
-    }
-
+    final (subtitle, isError) = switch ((_isResolving, error, staged)) {
+      (true, _, _) => ('Reading the latest tags from OpenStreetMap…', false),
+      (_, final message?, _) => (message, true),
+      (_, _, final edit?) => (edit.summary, false),
+      _ => (_describe(trail), false),
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          trail.name ?? 'Unnamed trail',
+          style: theme.textTheme.bodyMedium,
+          overflow: TextOverflow.ellipsis,
+        ),
         Row(
           children: [
-            const SizedBox(width: 40),
+            if (staged != null) ...[
+              const StatusBadge.staged(),
+              const SizedBox(width: 6),
+            ],
             Expanded(
-              child: DifficultyDropdown(
-                value: _draft,
-                onChanged: (d) => setState(() => _draft = d),
+              child: Text(
+                subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: isError ? theme.colorScheme.error : null,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            const SizedBox(width: 2),
-            IconAction(
-              icon: Icons.check,
-              tooltip: 'Stage this change',
-              onPressed: _draft == null ? null : _commit,
-              emphasised: true,
-            ),
-            IconAction(
-              icon: Icons.close,
-              tooltip: 'Discard',
-              onPressed: _cancel,
             ),
           ],
         ),
-        if (_draft?.isCommonsOnly ?? false)
-          Padding(
-            padding: const EdgeInsets.only(left: 40, top: 4),
-            child: Text(
-              Difficulty.commonsOnlyNote,
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
       ],
     );
   }
 
-  String _subtitle(Trail trail, StagedEdit? staged) {
-    if (staged != null) return staged.summary;
+  String _describe(Trail trail) {
     final surface = trail.surface?.label ?? trail.rawSurface;
     return switch ((trail.hasDifficulty, surface)) {
       (false, null) => 'No rating, no surface',

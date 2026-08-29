@@ -15,7 +15,13 @@ enum Difficulty {
   proLine('Pro Line', 4, Color(0xFFE1701A), _Shape.diamond, 2),
   unrated('Un-rated', null, Color(0xFFC8A02C), _Shape.ring, 1);
 
-  const Difficulty(this.label, this.imbaScale, this.color, this._shape, this._count);
+  const Difficulty(
+    this.label,
+    this.imbaScale,
+    this.color,
+    this._shape,
+    this._count,
+  );
 
   final String label;
 

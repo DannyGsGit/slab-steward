@@ -24,7 +24,7 @@ class StewardMapView extends StatefulWidget {
 
   /// Defaults to Grand Ridge / Duthie Hill, east of Seattle — one of the
   /// densest clusters of `mtb:scale:imba` tagging in the region, and still
-  /// patchy enough that the completeness lens has something to say on load.
+  /// patchy enough that the default lenses have something to say on load.
   final Geographic initialCenter;
   final double initialZoom;
 
@@ -40,7 +40,7 @@ class _StewardMapViewState extends State<StewardMapView> {
   StyleController? _style;
 
   /// The undecorated OpenTrailMap stylesheet, fetched once and re-spliced
-  /// whenever the mode or lens changes.
+  /// whenever the mode or lens selection changes.
   Map<String, Object?>? _baseStyle;
   String? _loadError;
 
@@ -80,12 +80,26 @@ class _StewardMapViewState extends State<StewardMapView> {
     super.initState();
     widget.state.addListener(_onStateChanged);
     _loadBaseStyle();
+    _pruneStaleOverrides();
   }
 
   @override
   void dispose() {
     widget.state.removeListener(_onStateChanged);
     super.dispose();
+  }
+
+  /// Drops overrides the tileset has caught up with.
+  ///
+  /// The TileJSON publishes the timestamp of the planet build it was cut
+  /// from, which is exactly the question an override needs answered: anything
+  /// Steward observed before that build is now in the tiles themselves, and
+  /// keeping it would just be a second copy going stale in its own right.
+  ///
+  Future<void> _pruneStaleOverrides() async {
+    final builtAt = await fetchTilesetBuiltAt();
+    if (!mounted || builtAt == null) return;
+    widget.state.overrides.pruneObservedBefore(builtAt);
   }
 
   Future<void> _loadBaseStyle() async {
@@ -105,14 +119,22 @@ class _StewardMapViewState extends State<StewardMapView> {
     }
   }
 
-  /// A fresh style document for the current mode and lens.
+  /// A fresh style document for the current mode and lens selection.
   ///
   /// [buildStewardStyle] mutates what it's given, so this re-decodes the cached
   /// base each time rather than handing over the same map twice.
   String _currentStyleJson() {
     final base = jsonDecode(jsonEncode(_baseStyle)) as Map<String, Object?>;
+    final overrides = widget.state.overrides;
     return jsonEncode(
-      buildStewardStyle(base, mode: widget.state.mode, lens: widget.state.lens),
+      buildStewardStyle(
+        base,
+        mode: widget.state.mode,
+        lenses: widget.state.lenses,
+        tags: overrides.isEmpty
+            ? const TagSource.tiles()
+            : TagSource.overriding(overrides.byTileId),
+      ),
     );
   }
 
@@ -171,7 +193,8 @@ class _StewardMapViewState extends State<StewardMapView> {
       data: jsonEncode({
         'type': 'FeatureCollection',
         'features': [
-          for (final trail in widget.state.stagedTrails) ?trail.toGeoJsonFeature(),
+          for (final trail in widget.state.stagedTrails)
+            ?trail.toGeoJsonFeature(),
         ],
       }),
     );
@@ -365,7 +388,11 @@ class _StagedBadge extends StatelessWidget {
           borderRadius: BorderRadius.circular(5),
           border: Border.all(color: _glowColor, width: 1.5),
           boxShadow: const [
-            BoxShadow(color: Color(0x33000000), blurRadius: 3, offset: Offset(0, 1)),
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 3,
+              offset: Offset(0, 1),
+            ),
           ],
         ),
         child: DifficultyIcon(difficulty, size: _glyphSize),

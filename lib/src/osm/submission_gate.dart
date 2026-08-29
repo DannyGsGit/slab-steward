@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../model/staged_edit.dart';
 import 'osm_api.dart';
+import 'osm_environment.dart';
 
 enum CheckStatus { open, running, passed, failed }
 
@@ -92,7 +93,14 @@ class ResolvedWrite {
 
 /// Comments the OSM wiki calls out as bad practice — content-free filler
 /// that doesn't say what changed or why. See the spec's "Comment templates".
-const bannedComments = {'update', 'fix', '.', 'edit', 'changes', 'slab steward edit'};
+const bannedComments = {
+  'update',
+  'fix',
+  '.',
+  'edit',
+  'changes',
+  'slab steward edit',
+};
 
 /// A high bar, per product direction: a comment needs more than one word and
 /// can't be one of the generic phrases the community already flags as noise.
@@ -118,7 +126,11 @@ String ensureHashtag(String comment) {
 /// the same instance to retry. UI listens via [ChangeNotifier] to draw the
 /// checklist live as each step moves from open to running to passed/failed.
 class SubmissionGate extends ChangeNotifier {
-  SubmissionGate({required this.osmApi, this.maxConcurrentReads = 4});
+  SubmissionGate({
+    required this.osmApi,
+    this.maxConcurrentReads = 4,
+    this.environment = osmEnvironment,
+  });
 
   final OsmApi osmApi;
 
@@ -126,11 +138,17 @@ class SubmissionGate extends ChangeNotifier {
   /// resolving a bulk selection.
   final int maxConcurrentReads;
 
+  /// Whether [submit] commits or stops short of the write. Injectable only so
+  /// tests can exercise both configurations in one run; the app always takes
+  /// the build's [osmEnvironment].
+  final OsmEnvironment environment;
+
   final List<SubmissionCheck> checks = [
     SubmissionCheck('comment', 'Changeset comment is descriptive'),
     SubmissionCheck('hashtag', 'Campaign hashtag present'),
     SubmissionCheck('fetch', 'Fetching latest data from OpenStreetMap'),
     SubmissionCheck('conflicts', 'Checking for edits made since you started'),
+    SubmissionCheck('submit', 'Submitting to $osmLabel'),
   ];
 
   /// The comment actually going out, hashtag included.
@@ -143,6 +161,18 @@ class SubmissionGate extends ChangeNotifier {
   /// Fresh reads keyed by way id, kept around so a conflict can be resolved
   /// by rebasing the edit onto them without a second round trip.
   Map<int, OsmWay> freshWays = const {};
+
+  /// Set once [submit] has actually opened a changeset — the changeset id
+  /// and its human-facing permalink, for the "all checks passed" panel to
+  /// show. The permalink is a *website* URL, not an API one.
+  int? changesetId;
+  String? get changesetUrl =>
+      changesetId == null ? null : '$osmWebHost/changeset/$changesetId';
+
+  /// True when [submit] failed because OSM rejected the token. The caller
+  /// should drop the stored session — a retry with the same token can only
+  /// fail the same way.
+  bool tokenRejected = false;
 
   SubmissionCheck _check(String id) => checks.firstWhere((c) => c.id == id);
 
@@ -160,6 +190,7 @@ class SubmissionGate extends ChangeNotifier {
     unreadable = const [];
     resolvedWrites = const [];
     freshWays = const {};
+    tokenRejected = false;
     notifyListeners();
 
     // 1. Comment quality — synchronous, but still gets its own row so the
@@ -191,7 +222,9 @@ class SubmissionGate extends ChangeNotifier {
 
     // Local-only edits (e.g. Pro Line over an already-Expert trail) never
     // touch OSM, so they need neither a fresh read nor a conflict check.
-    final onOsm = trails.where((t) => t.edits.any((e) => e.changesOsm)).toList();
+    final onOsm = trails
+        .where((t) => t.edits.any((e) => e.changesOsm))
+        .toList();
     final fetchCheck = _check('fetch');
     final conflictCheck = _check('conflicts');
     if (onOsm.isEmpty) {
@@ -257,7 +290,8 @@ class SubmissionGate extends ChangeNotifier {
       return false;
     }
     fetchCheck.status = CheckStatus.passed;
-    fetchCheck.detail = 'Read ${onOsm.length} trail${onOsm.length == 1 ? '' : 's'}.';
+    fetchCheck.detail =
+        'Read ${onOsm.length} trail${onOsm.length == 1 ? '' : 's'}.';
     notifyListeners();
 
     // 4. Conflict check — compare the value each edit was staged against to
@@ -323,6 +357,89 @@ class SubmissionGate extends ChangeNotifier {
       ..status = CheckStatus.passed
       ..detail = 'No conflicting edits found.';
     resolvedWrites = writes;
+    notifyListeners();
+    return true;
+  }
+
+  /// Actually writes [resolvedWrites] to OpenStreetMap — the step after
+  /// [run] has passed. Only called once the rider has confirmed the review
+  /// screen, since this is the point of no return: a closed changeset is
+  /// live and immutable (spec §5).
+  ///
+  /// Opens a changeset, uploads the diff as one atomic transaction, and
+  /// closes it. Local-only edits (nothing in [resolvedWrites]) skip the
+  /// network entirely, mirroring how [run] already short-circuits the
+  /// fetch/conflict checks in that case. On failure, [checks] records why
+  /// and nothing staged is cleared — that's the caller's job, and only once
+  /// this returns true.
+  ///
+  /// Under [OsmEnvironment.dryRun] these three calls are the *only* thing
+  /// that doesn't happen: the gate has already run in full against live OSM
+  /// data, and this still returns true, so staging clears and the map
+  /// recolours exactly as it would have. [changesetId] stays null, because
+  /// there is no changeset — which is what keeps the result panel from
+  /// linking to one that doesn't exist.
+  Future<bool> submit({
+    required String bearerToken,
+    required bool requestReview,
+  }) async {
+    final submitCheck = _check('submit')
+      ..status = CheckStatus.running
+      ..detail = null;
+    notifyListeners();
+
+    if (resolvedWrites.isEmpty) {
+      submitCheck
+        ..status = CheckStatus.passed
+        ..detail = 'Nothing to submit to $osmLabel.';
+      notifyListeners();
+      return true;
+    }
+
+    if (!environment.writesToOsm) {
+      submitCheck
+        ..status = CheckStatus.passed
+        ..detail =
+            'Dry run — every check ran against live $osmLabel data, and the '
+            'changeset was not sent.';
+      notifyListeners();
+      return true;
+    }
+
+    try {
+      final tags = {
+        'created_by': 'SLAB Steward',
+        'comment': finalComment,
+        'hashtags': '#slabsteward',
+        'host': 'https://slab-steward.web.app',
+        'locale': PlatformDispatcher.instance.locale.toLanguageTag(),
+        if (requestReview) 'review_requested': 'yes',
+      };
+      final id = await osmApi.openChangeset(
+        tags: tags,
+        bearerToken: bearerToken,
+      );
+      await osmApi.uploadChangeset(
+        changesetId: id,
+        writes: resolvedWrites,
+        bearerToken: bearerToken,
+      );
+      await osmApi.closeChangeset(changesetId: id, bearerToken: bearerToken);
+      changesetId = id;
+      submitCheck
+        ..status = CheckStatus.passed
+        ..detail = 'Changeset $id';
+    } on OsmApiException catch (e) {
+      tokenRejected = e.isUnauthorized;
+      submitCheck
+        ..status = CheckStatus.failed
+        ..detail = e.isUnauthorized
+            ? 'Your OpenStreetMap sign-in is no longer valid. Sign in again '
+                  'and retry — nothing was submitted.'
+            : e.message;
+      notifyListeners();
+      return false;
+    }
     notifyListeners();
     return true;
   }

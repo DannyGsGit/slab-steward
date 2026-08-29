@@ -20,6 +20,10 @@ Map<String, Object?> fakeBaseStyle() => {
   ],
 };
 
+/// The three attribute lenses together — what used to be the single fixed
+/// "Missing any" lens, and what the app selects by default.
+const attributeLenses = {Lens.difficulty, Lens.surface, Lens.electricBicycle};
+
 List<Map<String, Object?>> layersOf(Map<String, Object?> style) =>
     (style['layers'] as List).cast<Map<String, Object?>>();
 
@@ -31,7 +35,7 @@ void main() {
     final style = buildStewardStyle(
       fakeBaseStyle(),
       mode: TravelMode.mtb,
-      lens: Lens.completeness,
+      lenses: attributeLenses,
     );
     final sources = style['sources']! as Map<String, Object?>;
     expect(sources, contains('trails'));
@@ -45,7 +49,7 @@ void main() {
     final style = buildStewardStyle(
       fakeBaseStyle(),
       mode: TravelMode.mtb,
-      lens: Lens.none,
+      lenses: const <Lens>{},
     );
     final trails = (style['sources']! as Map)['trails']! as Map;
     expect(trails['attribution'], contains('OpenStreetMap'));
@@ -55,7 +59,7 @@ void main() {
     final style = buildStewardStyle(
       fakeBaseStyle(),
       mode: TravelMode.mtb,
-      lens: Lens.none,
+      lenses: const <Lens>{},
     );
     for (final id in ['trails_official', 'trails_informal', 'trail_labels']) {
       final layout = layerById(style, id)!['layout']! as Map<String, Object?>;
@@ -69,7 +73,7 @@ void main() {
     final style = buildStewardStyle(
       fakeBaseStyle(),
       mode: TravelMode.mtb,
-      lens: Lens.completeness,
+      lenses: attributeLenses,
     );
     final ids = layersOf(style).map((l) => l['id']).toList();
     expect(ids.indexOf('background'), lessThan(ids.indexOf('paths')));
@@ -82,11 +86,17 @@ void main() {
     final style = buildStewardStyle(
       fakeBaseStyle(),
       mode: TravelMode.mtb,
-      lens: Lens.completeness,
+      lenses: attributeLenses,
     );
     final ids = layersOf(style).map((l) => l['id']).toList();
-    expect(ids.indexOf('staged-glow'), lessThan(ids.indexOf('staged-glow-core')));
-    expect(ids.indexOf('staged-glow-core'), lessThan(ids.indexOf('selected-trail')));
+    expect(
+      ids.indexOf('staged-glow'),
+      lessThan(ids.indexOf('staged-glow-core')),
+    );
+    expect(
+      ids.indexOf('staged-glow-core'),
+      lessThan(ids.indexOf('selected-trail')),
+    );
     expect(ids.indexOf('selected-trail'), lessThan(ids.indexOf('paths')));
 
     // Blurred and blue, or it isn't a glow.
@@ -99,9 +109,11 @@ void main() {
 
   test('throws rather than silently drawing nothing if the marker is gone', () {
     final base = fakeBaseStyle();
-    (base['layers'] as List).removeWhere((l) => l['id'] == 'qa_insertion_point');
+    (base['layers'] as List).removeWhere(
+      (l) => l['id'] == 'qa_insertion_point',
+    );
     expect(
-      () => buildStewardStyle(base, mode: TravelMode.mtb, lens: Lens.none),
+      () => buildStewardStyle(base, mode: TravelMode.mtb, lenses: const {}),
       throwsStateError,
     );
   });
@@ -109,35 +121,38 @@ void main() {
   group('layer coverage', () {
     // Every trail in the tileset has to land in exactly one line layer.
     // The filters are MapLibre expressions, so this checks their shape rather
-    // than evaluating them: disallowed trails must not be gated on the lens,
+    // than evaluating them: disallowed trails must not be gated on the lenses,
     // or a restricted trail with missing tags would match nothing at all.
-    test('disallowed layers ignore the lens', () {
+    test('disallowed layers ignore the lenses', () {
       final style = buildStewardStyle(
         fakeBaseStyle(),
         mode: TravelMode.mtb,
-        lens: Lens.completeness,
+        lenses: attributeLenses,
       );
       final filter = layerById(style, 'disallowed-paths')!['filter'].toString();
       expect(filter, isNot(contains('mtb:scale:imba')));
     });
 
-    test('the lens gates the allowed layers', () {
+    test('the lenses gate the allowed layers', () {
       final style = buildStewardStyle(
         fakeBaseStyle(),
         mode: TravelMode.mtb,
-        lens: Lens.completeness,
+        lenses: attributeLenses,
       );
-      final filter = layerById(style, 'unspecified-paths')!['filter'].toString();
+      final filter = layerById(
+        style,
+        'unspecified-paths',
+      )!['filter'].toString();
       expect(filter, contains('mtb:scale:imba'));
       expect(filter, contains('surface'));
     });
   });
 
-  test('no lens means nothing renders as missing', () {
+  test('no lens selected means nothing renders as missing', () {
     final style = buildStewardStyle(
       fakeBaseStyle(),
       mode: TravelMode.all,
-      lens: Lens.none,
+      lenses: const <Lens>{},
     );
     // The layer still exists, but its filter is switched off outright.
     final filter = layerById(style, 'unspecified-paths')!['filter']! as List;
