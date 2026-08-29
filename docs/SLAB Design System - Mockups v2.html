@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SLAB — Design System Mockups v2</title>
+<style>
+:root{
+  --ink-950:#0B1512;
+  --ink-900:#12211C;
+  --ink-800:#1B2C25;
+  --ink-700:#24382F;
+  --ink-600:#32493D;
+  --line:rgba(243,239,230,0.08);
+  --gold:#C9A227;
+  --gold-soft:rgba(201,162,39,0.16);
+  --gold-dim:#8C7220;
+  --cream:#F3EFE6;
+  --sage:#93A69A;
+  --sage-dim:#5C6E62;
+  --rust:#B5453A;
+  --rust-soft:rgba(181,69,58,0.18);
+  --diff-easy:#5E9C5B;
+  --diff-inter:#4C86AE;
+  --diff-adv:#7C8478;
+  --diff-expert:#8E3B34;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink-950);color:var(--cream);font-family:-apple-system,BlinkMacSystemFont,'Inter',Helvetica,sans-serif;padding:56px 24px 100px;min-height:100vh}
+.page-header{text-align:center;margin-bottom:20px}
+.logo{font-size:32px;font-weight:700;letter-spacing:11px;color:var(--gold)}
+.subtitle{font-size:11px;text-transform:uppercase;letter-spacing:3px;color:var(--sage-dim);margin-top:8px}
+
+.intro{max-width:820px;margin:36px auto 64px;font-size:14px;line-height:1.7;color:var(--sage)}
+.intro strong{color:var(--cream)}
+.intro a{color:var(--gold)}
+
+.section-title{max-width:1200px;margin:0 auto 6px;font-size:12px;text-transform:uppercase;letter-spacing:2.5px;color:var(--gold-dim);font-weight:600;border-top:1px solid var(--ink-700);padding-top:36px}
+.section-note{max-width:1200px;margin:0 auto 28px;font-size:13px;color:var(--sage);line-height:1.6}
+
+/* ---------- Palette ---------- */
+.swatches{display:flex;flex-wrap:wrap;gap:20px;max-width:1200px;margin:0 auto 20px}
+.swatch{width:118px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.swatch-color{width:60px;height:60px;border-radius:12px;border:1px solid rgba(255,255,255,.06)}
+.swatch-name{font-size:11px;color:var(--cream);text-align:center;font-weight:600}
+.swatch-hex{font-size:10.5px;color:var(--sage-dim);font-family:monospace}
+.swatch-role{font-size:10px;color:var(--sage);text-align:center;line-height:1.4}
+
+/* ---------- Galleries ---------- */
+.gallery{display:flex;gap:44px;flex-wrap:wrap;justify-content:center;max-width:1300px;margin:0 auto}
+.frame-col{display:flex;flex-direction:column;align-items:center;gap:14px;width:375px}
+.frame-label{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--gold);font-weight:700}
+.frame-caption{font-size:12px;color:var(--sage);line-height:1.6;max-width:375px}
+.frame-caption b{color:var(--cream)}
+
+/* ---------- Phone frame ---------- */
+.phone{width:375px;height:812px;border-radius:46px;overflow:hidden;position:relative;background:#000;border:2px solid #1E2E27;box-shadow:0 24px 60px rgba(0,0,0,.45)}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:150px;height:28px;background:#000;border-radius:0 0 16px 16px;z-index:40}
+.sbar{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:0 26px;z-index:39}
+.sbar-time{font-size:13px;font-weight:600;color:var(--cream)}
+.sbar-icons{font-size:11px;color:var(--cream)}
+.map-fill{position:absolute;inset:0;background:#EDE7D8}
+
+/* ---------- Web browser frame ---------- */
+.browser{width:660px;border-radius:12px;overflow:hidden;background:var(--ink-900);border:1px solid var(--ink-700);box-shadow:0 24px 60px rgba(0,0,0,.45)}
+.browser-top{height:38px;display:flex;align-items:center;gap:8px;padding:0 14px;background:#0E1A16}
+.dot{width:9px;height:9px;border-radius:50%}
+.browser-url{margin-left:14px;flex:1;height:22px;background:var(--ink-800);border-radius:6px;display:flex;align-items:center;padding:0 10px;font-size:11px;color:var(--sage)}
+.app-body{display:flex;height:470px}
+.rail{width:64px;background:var(--ink-900);display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:14px;border-right:1px solid var(--line)}
+.rail-logo{font-size:13px;font-weight:700;letter-spacing:3px;color:var(--gold);margin-bottom:10px}
+.pane-web{width:236px;background:var(--ink-800);overflow-y:auto;padding:18px 16px;border-right:1px solid var(--line)}
+.map-area{flex:1;position:relative;overflow:hidden}
+
+/* ---------- Nav icons (shared) ---------- */
+.nav-icon-btn{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center}
+.nav-icon-btn.active{background:var(--gold-soft);border:1.5px solid var(--gold)}
+.tabbar{position:absolute;left:0;right:0;bottom:0;height:84px;background:var(--ink-900);border-top:1px solid var(--line);display:flex;z-index:35}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding-top:10px}
+.tab-label{font-size:10px;font-weight:600}
+
+/* ---------- Overlays on map (mobile) ---------- */
+.top-bar-overlay{position:absolute;top:46px;left:14px;right:14px;height:46px;border-radius:23px;background:rgba(18,33,28,0.92);border:1px solid rgba(201,162,39,.22);display:flex;align-items:center;padding:0 14px;gap:10px;z-index:20}
+.top-bar-overlay span.placeholder{font-size:14px;color:var(--sage);flex:1}
+.top-bar-overlay span.trailname{font-size:14px;color:var(--gold);font-weight:600;flex:1}
+.map-controls{position:absolute;right:14px;top:104px;display:flex;flex-direction:column;gap:8px;z-index:20}
+.map-controls.web{top:16px;right:16px}
+.map-ctrl-btn{width:38px;height:38px;background:var(--ink-900);border:1px solid var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center}
+
+/* ---------- Bottom sheet (mobile) ---------- */
+.sheet{position:absolute;left:0;right:0;bottom:84px;background:var(--ink-800);border-radius:22px 22px 0 0;border-top:1px solid var(--line);z-index:25;overflow-y:auto}
+.sheet-handle{width:36px;height:4px;background:rgba(243,239,230,.18);border-radius:2px;margin:12px auto 6px}
+.sheet-inner{padding:8px 20px 22px}
+
+/* ---------- Content components (shared mobile+web) ---------- */
+.ctx-heading{font-size:21px;font-weight:700;color:var(--cream);margin-bottom:12px}
+.back-row{display:flex;align-items:center;gap:8px;color:var(--gold);font-size:12px;font-weight:600;margin-bottom:14px}
+.search-input-inline{height:42px;border-radius:21px;background:var(--ink-700);border:1px solid var(--line);display:flex;align-items:center;padding:0 14px;gap:8px;margin-bottom:14px}
+.search-input-inline span{font-size:13px;color:var(--sage);flex:1}
+
+.card{background:var(--ink-700);border:1px solid var(--line);border-radius:14px;padding:13px;margin-bottom:10px}
+.card-row{display:flex;gap:10px}
+.card-row .card{flex:1}
+.card-icon{width:28px;height:28px;border-radius:8px;background:var(--gold-soft);display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+.card-title{font-size:13.5px;font-weight:700;color:var(--cream);margin-bottom:3px}
+.card-desc{font-size:11.5px;color:var(--sage);line-height:1.5}
+.trail-swatch{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--diff-inter),var(--diff-easy));margin:8px 0}
+
+.trail-name{font-size:22px;font-weight:700;color:var(--cream);margin-bottom:8px}
+.meta-row{display:flex;gap:8px;align-items:center;margin-bottom:14px}
+.badge{padding:4px 10px;border-radius:14px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:5px}
+.badge-easy{background:rgba(94,156,91,.16);color:var(--diff-easy)}
+.badge-inter{background:rgba(76,134,174,.16);color:var(--diff-inter)}
+.badge-adv{background:rgba(124,132,120,.2);color:#B7BEB2}
+.badge-expert{background:rgba(142,59,52,.2);color:#D98077}
+.status-open{padding:4px 10px;border-radius:14px;font-size:11px;font-weight:700;background:rgba(94,156,91,.14);color:var(--diff-easy)}
+
+.stat-grid{display:flex;background:var(--ink-900);border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden}
+.stat{flex:1;padding:10px 4px;text-align:center;border-right:1px solid var(--line)}
+.stat:last-child{border-right:none}
+.stat-val{font-size:14px;font-weight:700;color:var(--cream);display:block}
+.stat-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--sage-dim);display:block;margin-top:2px}
+
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.tag{padding:4px 10px;background:var(--ink-900);border:1px solid var(--line);border-radius:12px;font-size:11px;color:var(--sage)}
+
+.btn-gold{width:100%;height:46px;background:var(--gold);border-radius:23px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;font-weight:700;color:#17251E;margin-bottom:10px}
+.btn-row{display:flex;gap:8px}
+.btn-sec{flex:1;height:38px;background:var(--ink-900);border:1px solid var(--line);border-radius:19px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:11.5px;color:var(--sage);font-weight:600}
+
+.chip-row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+.chip{padding:5px 11px;border-radius:14px;font-size:11px;color:var(--sage);background:var(--ink-900);border:1px solid var(--line);display:flex;align-items:center;gap:5px;font-weight:600}
+.chip.active{background:var(--gold-soft);color:var(--gold);border-color:var(--gold)}
+.chip.dashed{border-style:dashed;color:var(--sage-dim)}
+
+.list-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line)}
+.list-row:last-child{border-bottom:none}
+.list-main .name{font-size:13.5px;font-weight:700;color:var(--cream);margin-bottom:4px}
+.list-main .meta{font-size:11px;color:var(--sage-dim)}
+.list-main .badges{display:flex;gap:6px;margin-bottom:4px}
+
+.rec-time{font-size:38px;font-weight:700;color:var(--gold);text-align:center;font-variant-numeric:tabular-nums;letter-spacing:1px}
+.rec-sub{font-size:12px;color:var(--sage);text-align:center;margin-bottom:16px}
+.live-grid{display:flex;justify-content:space-around;margin-bottom:16px}
+.live-stat{text-align:center}
+.live-val{font-size:19px;font-weight:700;color:var(--cream);display:block}
+.live-unit{font-size:10px;color:var(--sage-dim);text-transform:uppercase}
+.geo-row{display:flex;gap:8px;margin-bottom:14px}
+.geo-btn{flex:1;height:40px;border-radius:20px;background:var(--gold-soft);border:1px solid var(--gold);display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;font-weight:700;color:var(--gold)}
+.rec-controls{display:flex;gap:10px;align-items:center}
+.pause-pill{flex:1;height:42px;background:var(--ink-900);border:1px solid var(--line);border-radius:21px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;color:var(--sage);font-weight:600}
+.stop-circle{width:42px;height:42px;border-radius:50%;background:var(--rust-soft);border:1px solid rgba(181,69,58,.4);display:flex;align-items:center;justify-content:center}
+
+.avatar{width:56px;height:56px;border-radius:50%;background:var(--gold-soft);border:1.5px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--gold);margin-bottom:10px}
+.acct-stat-row{display:flex;gap:8px;margin-bottom:16px}
+.acct-stat{flex:1;background:var(--ink-900);border:1px solid var(--line);border-radius:10px;padding:9px;text-align:center}
+.menu-row{display:flex;align-items:center;justify-content:space-between;padding:13px 2px;border-bottom:1px solid var(--line);font-size:13px;color:var(--cream);font-weight:600}
+.menu-row:last-child{border-bottom:none}
+.soon-pill{font-size:9.5px;background:var(--gold-soft);color:var(--gold);padding:2px 7px;border-radius:8px;font-weight:700;margin-left:8px}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="logo">S L A B</div>
+  <div class="subtitle">Design System — Visual Mockups v2 · July 2026</div>
+</div>
+
+<div class="intro">
+  This supersedes the color direction in <b>SLAB Design System — Nav &amp; Slider Pane v1</b>. That doc's July mockups were wireframes — their teal/cream chrome wasn't meant to carry forward. The palette below instead bridges the <strong>moody, dark-forest / gold identity</strong> from the original brand mockups and SLAB wordmark with the <strong>navy chrome and gold icon accents</strong> already live in the current app's map screen. The map itself — basemap, trail line colors, star trailheads — is treated as fixed and untouched; every mockup below reuses it as-is. Only the surrounding chrome (rails, tab bars, search fields, the slider pane, and its six contexts) is new.
+  <br><br>
+  Two open items from v1 are resolved here: control-panel icon order is now consistent across web and mobile (Discover, Search, Record, Favorites, Account), and mobile's missing Settings tab is folded into a menu row inside Account. Gear Garage still has no confirmed home in this IA — flagged in the Account mock below as a placeholder.
+</div>
+
+<div class="section-title">Palette</div>
+<div class="section-note">Sampled to hex for engineering handoff. Confirm final values against exported design tokens once this direction is approved — treat these as the intended direction, not pixel-locked.</div>
+<div class="swatches">
+  <div class="swatch"><div class="swatch-color" style="background:#12211C"></div><div class="swatch-name">Ink 900</div><div class="swatch-hex">#12211C</div><div class="swatch-role">Rail / tab bar / search chrome</div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#1B2C25"></div><div class="swatch-name">Ink 800</div><div class="swatch-hex">#1B2C25</div><div class="swatch-role">Slider pane surface</div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#24382F"></div><div class="swatch-name">Ink 700</div><div class="swatch-hex">#24382F</div><div class="swatch-role">Cards, rows, inputs</div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#C9A227"></div><div class="swatch-name">Gold</div><div class="swatch-hex">#C9A227</div><div class="swatch-role">Logo, CTA, active state, stars, favorites</div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#F3EFE6"></div><div class="swatch-name">Cream</div><div class="swatch-hex">#F3EFE6</div><div class="swatch-role">Primary text on dark</div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#93A69A"></div><div class="swatch-name">Sage</div><div class="swatch-hex">#93A69A</div><div class="swatch-role">Secondary text — echoes map hillshade</div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#B5453A"></div><div class="swatch-name">Rust</div><div class="swatch-hex">#B5453A</div><div class="swatch-role">Recording / live-only accent</div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#5E9C5B"></div><div class="swatch-name">Difficulty — Easy</div><div class="swatch-hex">#5E9C5B</div><div class="swatch-role">Matches map trail green</div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#4C86AE"></div><div class="swatch-name">Difficulty — Intermediate</div><div class="swatch-hex">#4C86AE</div><div class="swatch-role">Matches map trail blue</div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#7C8478"></div><div class="swatch-name">Difficulty — Advanced</div><div class="swatch-hex">#7C8478</div><div class="swatch-role">Matches map trail charcoal</div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#8E3B34"></div><div class="swatch-name">Difficulty — Expert</div><div class="swatch-hex">#8E3B34</div><div class="swatch-role">Matches map trail red</div></div>
+</div>
+
+<!-- ============================================================ MOBILE ============================================================ -->
+<div class="section-title">Mobile — six slider-pane contexts</div>
+<div class="section-note">Bottom tab bar with five icons. The slider pane is a draggable sheet above the tab bar; height shown here is its typical resting position per context.</div>
+
+<div class="gallery">
+
+  <!-- 1 Discover -->
+  <div class="frame-col">
+    <span class="frame-label">1 · Discover (default)</span>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="sbar"><span class="sbar-time">9:41</span><span class="sbar-icons">●●●● 100%</span></div>
+      <div class="map-fill"></div>
+      <div class="top-bar-overlay"><span data-icon="search" data-color="var(--sage)" data-size="16"></span><span class="placeholder">Search trails…</span><span data-icon="filter" data-color="var(--gold)" data-size="15"></span></div>
+      <div class="map-controls">
+        <div class="map-ctrl-btn"><span data-icon="person" data-color="var(--gold)" data-size="17"></span></div>
+        <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="17"></span></div>
+        <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="16"></span></div>
+      </div>
+      <div class="sheet" style="top:44%">
+        <div class="sheet-handle"></div>
+        <div class="sheet-inner">
+          <div class="ctx-heading">Discover</div>
+          <div class="card">
+            <div class="card-icon"><span data-icon="compass" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="card-title">Explore Nearby Trails</div>
+            <div class="card-desc">Recommendations based on your current location.</div>
+          </div>
+          <div class="card-row">
+            <div class="card"><div class="card-title" style="font-size:12.5px">Popular Rides</div></div>
+            <div class="card"><div class="card-title" style="font-size:12.5px">Popular Featured Ride</div></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Today's Featured Ride</div>
+            <div class="trail-swatch"></div>
+            <div class="card-desc">Ridge Runner · 4.2 km · ↑280m</div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><span data-icon="compass" data-color="var(--gold)" data-size="21"></span><span class="tab-label" style="color:var(--gold)">Discover</span></div>
+        <div class="tab"><span data-icon="search" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Search</span></div>
+        <div class="tab"><span data-icon="recordDot" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Record</span></div>
+        <div class="tab"><span data-icon="heart" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Favorites</span></div>
+        <div class="tab"><span data-icon="person" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Account</span></div>
+      </div>
+    </div>
+    <p class="frame-caption">Default state when nothing is selected on the map. <b>Explore Nearby Trails</b> is the primary card; two secondary cards and a featured-ride card follow. The search field here is a shortcut into full Search, not a live filter.</p>
+  </div>
+
+  <!-- 2 Trail Details -->
+  <div class="frame-col">
+    <span class="frame-label">2 · Trail Details</span>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="sbar"><span class="sbar-time">9:41</span><span class="sbar-icons">●●●● 100%</span></div>
+      <div class="map-fill"></div>
+      <div class="top-bar-overlay"><span data-icon="back" data-color="var(--gold)" data-size="16"></span><span class="trailname">Ridge Runner</span></div>
+      <div class="map-controls">
+        <div class="map-ctrl-btn"><span data-icon="person" data-color="var(--gold)" data-size="17"></span></div>
+        <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="17"></span></div>
+        <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="16"></span></div>
+      </div>
+      <div class="sheet" style="top:52%">
+        <div class="sheet-handle"></div>
+        <div class="sheet-inner">
+          <div class="trail-name">Ridge Runner</div>
+          <div class="meta-row">
+            <div class="badge badge-inter"><span data-icon="compass" data-color="var(--diff-inter)" data-size="10"></span>Intermediate</div>
+            <div class="status-open">● Open</div>
+          </div>
+          <div class="stat-grid">
+            <div class="stat"><span class="stat-val">4.2</span><span class="stat-lbl">km</span></div>
+            <div class="stat"><span class="stat-val">↑280m</span><span class="stat-lbl">gain</span></div>
+            <div class="stat"><span class="stat-val">Loop</span><span class="stat-lbl">direction</span></div>
+            <div class="stat"><span class="stat-val">~45</span><span class="stat-lbl">min</span></div>
+          </div>
+          <div class="tags"><span class="tag">Singletrack</span><span class="tag">Flow</span><span class="tag">Rooted</span><span class="tag">Tiger Mtn</span></div>
+          <div class="btn-gold"><span data-icon="recordDot" data-color="#17251E" data-size="15"></span>Start Ride</div>
+          <div class="btn-row">
+            <div class="btn-sec"><span data-icon="star" data-color="var(--sage)" data-size="13"></span>Reviews</div>
+            <div class="btn-sec"><span data-icon="share" data-color="var(--sage)" data-size="13"></span>Share</div>
+            <div class="btn-sec" style="color:var(--gold)"><span data-icon="heart" data-color="var(--gold)" data-size="13"></span>Save</div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><span data-icon="compass" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Discover</span></div>
+        <div class="tab"><span data-icon="search" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Search</span></div>
+        <div class="tab"><span data-icon="recordDot" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Record</span></div>
+        <div class="tab"><span data-icon="heart" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Favorites</span></div>
+        <div class="tab"><span data-icon="person" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Account</span></div>
+      </div>
+    </div>
+    <p class="frame-caption">Triggered by tapping a trail on the map, not a tab — no tab icon is active. Top overlay swaps from search to a back bar with the trail name. Already implemented; shown here restyled to the new palette only.</p>
+  </div>
+
+  <!-- 3 Search -->
+  <div class="frame-col">
+    <span class="frame-label">3 · Search</span>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="sbar"><span class="sbar-time">9:41</span><span class="sbar-icons">●●●● 100%</span></div>
+      <div class="map-fill"></div>
+      <div class="top-bar-overlay"><span data-icon="search" data-color="var(--gold)" data-size="16"></span><span class="placeholder" style="color:var(--cream)">Ridge...</span></div>
+      <div class="map-controls">
+        <div class="map-ctrl-btn"><span data-icon="person" data-color="var(--gold)" data-size="17"></span></div>
+        <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="17"></span></div>
+        <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="16"></span></div>
+      </div>
+      <div class="sheet" style="top:38%">
+        <div class="sheet-handle"></div>
+        <div class="sheet-inner">
+          <div class="ctx-heading">Search</div>
+          <div class="chip-row">
+            <div class="chip">Difficulty <span data-icon="chevronDown" data-color="var(--sage)" data-size="11"></span></div>
+            <div class="chip">Distance <span data-icon="chevronDown" data-color="var(--sage)" data-size="11"></span></div>
+            <div class="chip">Elevation <span data-icon="chevronDown" data-color="var(--sage)" data-size="11"></span></div>
+          </div>
+          <div style="font-size:11px;color:var(--gold);margin-bottom:6px;font-weight:600">Sort: Distance from you ▾</div>
+          <div class="list-row">
+            <div class="list-main"><div class="badges"><span class="badge badge-easy">Easy</span></div><div class="name">Chuckanut Loop</div><div class="meta">3.1 km · ↑140m · 0.6 km away</div></div>
+            <span data-icon="chevronRight" data-color="var(--sage-dim)" data-size="16"></span>
+          </div>
+          <div class="list-row">
+            <div class="list-main"><div class="badges"><span class="badge badge-inter">Intermediate</span></div><div class="name">Ridge Runner</div><div class="meta">4.2 km · ↑280m · 1.1 km away</div></div>
+            <span data-icon="chevronRight" data-color="var(--sage-dim)" data-size="16"></span>
+          </div>
+          <div class="list-row">
+            <div class="list-main"><div class="badges"><span class="badge badge-expert">Expert</span></div><div class="name">The Slab</div><div class="meta">2.4 km · ↑410m · 2.3 km away</div></div>
+            <span data-icon="chevronRight" data-color="var(--sage-dim)" data-size="16"></span>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><span data-icon="compass" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Discover</span></div>
+        <div class="tab"><span data-icon="search" data-color="var(--gold)" data-size="21"></span><span class="tab-label" style="color:var(--gold)">Search</span></div>
+        <div class="tab"><span data-icon="recordDot" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Record</span></div>
+        <div class="tab"><span data-icon="heart" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Favorites</span></div>
+        <div class="tab"><span data-icon="person" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Account</span></div>
+      </div>
+    </div>
+    <p class="frame-caption">Name + filter search. Each result row shows name, difficulty, distance, elevation gain, and distance from the user. Filter chips and the sort control apply to the whole result set.</p>
+  </div>
+
+  <!-- 4 Record -->
+  <div class="frame-col">
+    <span class="frame-label">4 · Record</span>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="sbar"><span class="sbar-time">9:41</span><span class="sbar-icons">●●●● 100%</span></div>
+      <div class="map-fill recording"></div>
+      <div class="top-bar-overlay" style="border-color:rgba(181,69,58,.4)"><span data-icon="recordDot" data-color="var(--rust)" data-size="12"></span><span class="placeholder" style="color:var(--rust);font-weight:700">00:34:12</span><span style="font-size:11px;color:var(--sage)">Galbraith Mtn</span></div>
+      <div class="map-controls">
+        <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="17"></span></div>
+        <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="16"></span></div>
+      </div>
+      <div class="sheet" style="top:62%">
+        <div class="sheet-handle"></div>
+        <div class="sheet-inner">
+          <div class="rec-time">00:34:12</div>
+          <div class="rec-sub">Galbraith Mtn · Ridge Runner</div>
+          <div class="live-grid">
+            <div class="live-stat"><span class="live-val">18.4</span><span class="live-unit">km/h</span></div>
+            <div class="live-stat"><span class="live-val">7.2</span><span class="live-unit">km</span></div>
+            <div class="live-stat"><span class="live-val">↑312m</span><span class="live-unit">gain</span></div>
+          </div>
+          <div class="geo-row">
+            <div class="geo-btn"><span data-icon="pin" data-color="var(--gold)" data-size="14"></span>Note</div>
+            <div class="geo-btn"><span data-icon="camera" data-color="var(--gold)" data-size="14"></span>Photo</div>
+          </div>
+          <div class="rec-controls">
+            <div class="pause-pill"><span data-icon="pause" data-color="var(--sage)" data-size="14"></span>Pause</div>
+            <div class="stop-circle"><span data-icon="stop" data-color="var(--rust)" data-size="15"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><span data-icon="compass" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Discover</span></div>
+        <div class="tab"><span data-icon="search" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Search</span></div>
+        <div class="tab"><span data-icon="recordDot" data-color="var(--rust)" data-size="21"></span><span class="tab-label" style="color:var(--rust)">Record</span></div>
+        <div class="tab"><span data-icon="heart" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Favorites</span></div>
+        <div class="tab"><span data-icon="person" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Account</span></div>
+      </div>
+    </div>
+    <p class="frame-caption">Live GPS stats plus <b>Note</b> and <b>Photo</b> buttons that geo-pin a marker at the rider's current position. Record accent is rust, not gold — kept visually distinct as the one "something is live" state. Recorded track drawn in the same color.</p>
+  </div>
+
+  <!-- 5 Favorites -->
+  <div class="frame-col">
+    <span class="frame-label">5 · Favorites</span>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="sbar"><span class="sbar-time">9:41</span><span class="sbar-icons">●●●● 100%</span></div>
+      <div class="map-fill"></div>
+      <div class="top-bar-overlay"><span data-icon="search" data-color="var(--sage)" data-size="16"></span><span class="placeholder">Search favorites…</span><span data-icon="filter" data-color="var(--gold)" data-size="15"></span></div>
+      <div class="map-controls">
+        <div class="map-ctrl-btn"><span data-icon="person" data-color="var(--gold)" data-size="17"></span></div>
+        <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="17"></span></div>
+        <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="16"></span></div>
+      </div>
+      <div class="sheet" style="top:40%">
+        <div class="sheet-handle"></div>
+        <div class="sheet-inner">
+          <div class="ctx-heading">Favorites</div>
+          <div class="chip-row">
+            <div class="chip active">All</div>
+            <div class="chip">Weekend Loops</div>
+            <div class="chip">PR Attempts</div>
+            <div class="chip dashed">+ New Group</div>
+          </div>
+          <div class="list-row">
+            <div class="list-main"><div class="badges"><span class="badge badge-inter">Intermediate</span></div><div class="name">Ridge Runner</div><div class="meta">4.2 km · ↑280m</div></div>
+            <span data-icon="heartFilled" data-color="var(--gold)" data-size="17"></span>
+          </div>
+          <div class="list-row">
+            <div class="list-main"><div class="badges"><span class="badge badge-easy">Easy</span></div><div class="name">Chuckanut Loop</div><div class="meta">3.1 km · ↑140m</div></div>
+            <span data-icon="heartFilled" data-color="var(--gold)" data-size="17"></span>
+          </div>
+          <div class="list-row">
+            <div class="list-main"><div class="badges"><span class="badge badge-adv">Advanced</span></div><div class="name">Chainring Traverse</div><div class="meta">6.0 km · ↑390m</div></div>
+            <span data-icon="heartFilled" data-color="var(--gold)" data-size="17"></span>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><span data-icon="compass" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Discover</span></div>
+        <div class="tab"><span data-icon="search" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Search</span></div>
+        <div class="tab"><span data-icon="recordDot" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Record</span></div>
+        <div class="tab"><span data-icon="heart" data-color="var(--gold)" data-size="21"></span><span class="tab-label" style="color:var(--gold)">Favorites</span></div>
+        <div class="tab"><span data-icon="person" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Account</span></div>
+      </div>
+    </div>
+    <p class="frame-caption">Favorited trails with search &amp; filter, grouped into custom lists ("Weekend Loops", "PR Attempts"). Filled gold heart mirrors the gold trailhead stars on the map — same "you've marked this" semantic.</p>
+  </div>
+
+  <!-- 6 Account -->
+  <div class="frame-col">
+    <span class="frame-label">6 · Account</span>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="sbar"><span class="sbar-time">9:41</span><span class="sbar-icons">●●●● 100%</span></div>
+      <div class="map-fill"></div>
+      <div class="map-controls">
+        <div class="map-ctrl-btn"><span data-icon="person" data-color="var(--gold)" data-size="17"></span></div>
+        <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="17"></span></div>
+        <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="16"></span></div>
+      </div>
+      <div class="sheet" style="top:40%">
+        <div class="sheet-handle"></div>
+        <div class="sheet-inner">
+          <div class="avatar">DG</div>
+          <div class="ctx-heading" style="font-size:17px;margin-bottom:2px">Danny G.</div>
+          <div style="font-size:11px;color:var(--sage-dim);margin-bottom:14px">danny.godbout@gmail.com</div>
+          <div class="acct-stat-row">
+            <div class="acct-stat"><span class="stat-val" style="font-size:14px">37</span><span class="stat-lbl">Rides</span></div>
+            <div class="acct-stat"><span class="stat-val" style="font-size:14px">412km</span><span class="stat-lbl">Distance</span></div>
+            <div class="acct-stat"><span class="stat-val" style="font-size:14px">6</span><span class="stat-lbl">OSM edits</span></div>
+          </div>
+          <div class="menu-row"><span>Settings</span><span data-icon="chevronRight" data-color="var(--sage-dim)" data-size="15"></span></div>
+          <div class="menu-row"><span style="display:flex;align-items:center">Gear Garage<span class="soon-pill">SOON</span></span><span data-icon="chevronRight" data-color="var(--sage-dim)" data-size="15"></span></div>
+          <div class="menu-row"><span>Help &amp; Support</span><span data-icon="chevronRight" data-color="var(--sage-dim)" data-size="15"></span></div>
+          <div class="menu-row" style="color:var(--rust)">Sign Out</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><span data-icon="compass" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Discover</span></div>
+        <div class="tab"><span data-icon="search" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Search</span></div>
+        <div class="tab"><span data-icon="recordDot" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Record</span></div>
+        <div class="tab"><span data-icon="heart" data-color="var(--sage-dim)" data-size="21"></span><span class="tab-label" style="color:var(--sage-dim)">Favorites</span></div>
+        <div class="tab"><span data-icon="person" data-color="var(--gold)" data-size="21"></span><span class="tab-label" style="color:var(--gold)">Account</span></div>
+      </div>
+    </div>
+    <p class="frame-caption">Minimal stub per PRD scope — avatar, three lifetime stats, and a menu. Settings lives here (mobile has no separate Settings tab). Gear Garage shown as a disabled "soon" row — placeholder only, its real IA home is still an open question.</p>
+  </div>
+
+</div>
+
+<!-- ============================================================ WEB ============================================================ -->
+<div class="section-title">Web — same six contexts</div>
+<div class="section-note">Left rail replaces the tab bar and adds a sixth icon (Settings) since there's room. The slider pane is a fixed column rather than a bottom sheet; content is otherwise identical to mobile.</div>
+
+<div class="gallery">
+
+  <!-- WEB 1 Discover -->
+  <div class="frame-col" style="width:660px">
+    <span class="frame-label">1 · Discover (default)</span>
+    <div class="browser">
+      <div class="browser-top"><div class="dot" style="background:#C9776B"></div><div class="dot" style="background:#C9A227"></div><div class="dot" style="background:#5E9C5B"></div><div class="browser-url">slab.app/map</div></div>
+      <div class="app-body">
+        <div class="rail">
+          <div class="rail-logo">S</div>
+          <div class="nav-icon-btn active"><span data-icon="compass" data-color="var(--gold)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="search" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="recordDot" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="heart" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="person" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="gear" data-color="var(--sage-dim)" data-size="19"></span></div>
+        </div>
+        <div class="pane-web">
+          <div class="ctx-heading">Discover</div>
+          <div class="search-input-inline"><span data-icon="search" data-color="var(--sage)" data-size="14"></span><span>Search trails…</span></div>
+          <div class="card">
+            <div class="card-icon"><span data-icon="compass" data-color="var(--gold)" data-size="15"></span></div>
+            <div class="card-title">Explore Nearby Trails</div>
+            <div class="card-desc">Recommendations based on your current location.</div>
+          </div>
+          <div class="card-row">
+            <div class="card"><div class="card-title" style="font-size:12px">Popular Rides</div></div>
+            <div class="card"><div class="card-title" style="font-size:12px">Featured Ride</div></div>
+          </div>
+          <div class="card"><div class="card-title">Today's Featured Ride</div><div class="trail-swatch"></div><div class="card-desc">Ridge Runner · 4.2 km</div></div>
+        </div>
+        <div class="map-area">
+          <div class="map-fill"></div>
+          <div class="map-controls web">
+            <div class="map-ctrl-btn"><span data-icon="person" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="15"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="layers" data-color="var(--gold)" data-size="16"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="frame-caption">Rail replaces the compass card's search shortcut with a persistent input at the top of the pane, since there's no separate overlay search bar on web.</p>
+  </div>
+
+  <!-- WEB 2 Trail Details -->
+  <div class="frame-col" style="width:660px">
+    <span class="frame-label">2 · Trail Details</span>
+    <div class="browser">
+      <div class="browser-top"><div class="dot" style="background:#C9776B"></div><div class="dot" style="background:#C9A227"></div><div class="dot" style="background:#5E9C5B"></div><div class="browser-url">slab.app/trail/ridge-runner</div></div>
+      <div class="app-body">
+        <div class="rail">
+          <div class="rail-logo">S</div>
+          <div class="nav-icon-btn"><span data-icon="compass" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="search" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="recordDot" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="heart" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="person" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="gear" data-color="var(--sage-dim)" data-size="19"></span></div>
+        </div>
+        <div class="pane-web">
+          <div class="back-row"><span data-icon="back" data-color="var(--gold)" data-size="13"></span>Discover</div>
+          <div class="trail-name" style="font-size:19px">Ridge Runner</div>
+          <div class="meta-row">
+            <div class="badge badge-inter">Intermediate</div>
+            <div class="status-open">● Open</div>
+          </div>
+          <div class="stat-grid">
+            <div class="stat"><span class="stat-val" style="font-size:12.5px">4.2</span><span class="stat-lbl">km</span></div>
+            <div class="stat"><span class="stat-val" style="font-size:12.5px">↑280m</span><span class="stat-lbl">gain</span></div>
+            <div class="stat"><span class="stat-val" style="font-size:12.5px">Loop</span><span class="stat-lbl">dir.</span></div>
+            <div class="stat"><span class="stat-val" style="font-size:12.5px">~45</span><span class="stat-lbl">min</span></div>
+          </div>
+          <div class="tags"><span class="tag">Singletrack</span><span class="tag">Flow</span><span class="tag">Rooted</span></div>
+          <div class="btn-gold"><span data-icon="recordDot" data-color="#17251E" data-size="14"></span>Start Ride</div>
+          <div class="btn-row">
+            <div class="btn-sec"><span data-icon="star" data-color="var(--sage)" data-size="12"></span>Reviews</div>
+            <div class="btn-sec"><span data-icon="share" data-color="var(--sage)" data-size="12"></span>Share</div>
+            <div class="btn-sec" style="color:var(--gold)"><span data-icon="heart" data-color="var(--gold)" data-size="12"></span>Save</div>
+          </div>
+        </div>
+        <div class="map-area">
+          <div class="map-fill"></div>
+          <div class="map-controls web">
+            <div class="map-ctrl-btn"><span data-icon="person" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="15"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="layers" data-color="var(--gold)" data-size="16"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="frame-caption">No rail icon is active — trail selection is map-driven. A small "← Discover" link replaces mobile's back-bar-over-map treatment, since the pane is a fixed column here, not an overlay.</p>
+  </div>
+
+  <!-- WEB 3 Search -->
+  <div class="frame-col" style="width:660px">
+    <span class="frame-label">3 · Search</span>
+    <div class="browser">
+      <div class="browser-top"><div class="dot" style="background:#C9776B"></div><div class="dot" style="background:#C9A227"></div><div class="dot" style="background:#5E9C5B"></div><div class="browser-url">slab.app/search</div></div>
+      <div class="app-body">
+        <div class="rail">
+          <div class="rail-logo">S</div>
+          <div class="nav-icon-btn"><span data-icon="compass" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn active"><span data-icon="search" data-color="var(--gold)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="recordDot" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="heart" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="person" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="gear" data-color="var(--sage-dim)" data-size="19"></span></div>
+        </div>
+        <div class="pane-web">
+          <div class="ctx-heading">Search</div>
+          <div class="search-input-inline"><span data-icon="search" data-color="var(--gold)" data-size="14"></span><span style="color:var(--cream)">Ridge...</span></div>
+          <div class="chip-row">
+            <div class="chip">Difficulty <span data-icon="chevronDown" data-color="var(--sage)" data-size="10"></span></div>
+            <div class="chip">Distance <span data-icon="chevronDown" data-color="var(--sage)" data-size="10"></span></div>
+          </div>
+          <div style="font-size:10.5px;color:var(--gold);margin-bottom:6px;font-weight:600">Sort: Distance ▾</div>
+          <div class="list-row">
+            <div class="list-main"><div class="badges"><span class="badge badge-easy">Easy</span></div><div class="name" style="font-size:12.5px">Chuckanut Loop</div><div class="meta">3.1 km · ↑140m · 0.6 km</div></div>
+          </div>
+          <div class="list-row">
+            <div class="list-main"><div class="badges"><span class="badge badge-inter">Intermediate</span></div><div class="name" style="font-size:12.5px">Ridge Runner</div><div class="meta">4.2 km · ↑280m · 1.1 km</div></div>
+          </div>
+          <div class="list-row">
+            <div class="list-main"><div class="badges"><span class="badge badge-expert">Expert</span></div><div class="name" style="font-size:12.5px">The Slab</div><div class="meta">2.4 km · ↑410m · 2.3 km</div></div>
+          </div>
+        </div>
+        <div class="map-area">
+          <div class="map-fill"></div>
+          <div class="map-controls web">
+            <div class="map-ctrl-btn"><span data-icon="person" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="15"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="layers" data-color="var(--gold)" data-size="16"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="frame-caption">Same result fields as mobile: name, difficulty, distance, elevation, distance from user — sortable. Results should also highlight on the map on hover (not shown).</p>
+  </div>
+
+  <!-- WEB 4 Record -->
+  <div class="frame-col" style="width:660px">
+    <span class="frame-label">4 · Record</span>
+    <div class="browser">
+      <div class="browser-top"><div class="dot" style="background:#C9776B"></div><div class="dot" style="background:#C9A227"></div><div class="dot" style="background:#5E9C5B"></div><div class="browser-url">slab.app/record</div></div>
+      <div class="app-body">
+        <div class="rail">
+          <div class="rail-logo">S</div>
+          <div class="nav-icon-btn"><span data-icon="compass" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="search" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn active" style="background:var(--rust-soft);border-color:var(--rust)"><span data-icon="recordDot" data-color="var(--rust)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="heart" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="person" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="gear" data-color="var(--sage-dim)" data-size="19"></span></div>
+        </div>
+        <div class="pane-web">
+          <div class="rec-time" style="font-size:30px">00:34:12</div>
+          <div class="rec-sub">Galbraith Mtn · Ridge Runner</div>
+          <div class="live-grid">
+            <div class="live-stat"><span class="live-val" style="font-size:15px">18.4</span><span class="live-unit">km/h</span></div>
+            <div class="live-stat"><span class="live-val" style="font-size:15px">7.2</span><span class="live-unit">km</span></div>
+            <div class="live-stat"><span class="live-val" style="font-size:15px">↑312m</span><span class="live-unit">gain</span></div>
+          </div>
+          <div class="geo-row">
+            <div class="geo-btn"><span data-icon="pin" data-color="var(--gold)" data-size="13"></span>Note</div>
+            <div class="geo-btn"><span data-icon="camera" data-color="var(--gold)" data-size="13"></span>Photo</div>
+          </div>
+          <div class="rec-controls">
+            <div class="pause-pill"><span data-icon="pause" data-color="var(--sage)" data-size="13"></span>Pause</div>
+            <div class="stop-circle"><span data-icon="stop" data-color="var(--rust)" data-size="14"></span></div>
+          </div>
+        </div>
+        <div class="map-area">
+          <div class="map-fill recording"></div>
+          <div class="map-controls web">
+            <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="15"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="frame-caption">Web recording is a secondary use case (most rides start on mobile) but the pane should still support monitoring an in-progress ride synced from a phone, or starting one via a paired device.</p>
+  </div>
+
+  <!-- WEB 5 Favorites -->
+  <div class="frame-col" style="width:660px">
+    <span class="frame-label">5 · Favorites</span>
+    <div class="browser">
+      <div class="browser-top"><div class="dot" style="background:#C9776B"></div><div class="dot" style="background:#C9A227"></div><div class="dot" style="background:#5E9C5B"></div><div class="browser-url">slab.app/favorites</div></div>
+      <div class="app-body">
+        <div class="rail">
+          <div class="rail-logo">S</div>
+          <div class="nav-icon-btn"><span data-icon="compass" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="search" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="recordDot" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn active"><span data-icon="heart" data-color="var(--gold)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="person" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="gear" data-color="var(--sage-dim)" data-size="19"></span></div>
+        </div>
+        <div class="pane-web">
+          <div class="ctx-heading">Favorites</div>
+          <div class="chip-row">
+            <div class="chip active">All</div>
+            <div class="chip">Weekend Loops</div>
+            <div class="chip dashed">+ New</div>
+          </div>
+          <div class="list-row">
+            <div class="list-main"><div class="badges"><span class="badge badge-inter">Intermediate</span></div><div class="name" style="font-size:12.5px">Ridge Runner</div><div class="meta">4.2 km · ↑280m</div></div>
+            <span data-icon="heartFilled" data-color="var(--gold)" data-size="15"></span>
+          </div>
+          <div class="list-row">
+            <div class="list-main"><div class="badges"><span class="badge badge-easy">Easy</span></div><div class="name" style="font-size:12.5px">Chuckanut Loop</div><div class="meta">3.1 km · ↑140m</div></div>
+            <span data-icon="heartFilled" data-color="var(--gold)" data-size="15"></span>
+          </div>
+        </div>
+        <div class="map-area">
+          <div class="map-fill"></div>
+          <div class="map-controls web">
+            <div class="map-ctrl-btn"><span data-icon="person" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="15"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="layers" data-color="var(--gold)" data-size="16"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="frame-caption">Identical structure to mobile. Groups could reasonably support drag-and-drop reordering on web given cursor input — worth a follow-up design pass, not required for v1.</p>
+  </div>
+
+  <!-- WEB 6 Account -->
+  <div class="frame-col" style="width:660px">
+    <span class="frame-label">6 · Account</span>
+    <div class="browser">
+      <div class="browser-top"><div class="dot" style="background:#C9776B"></div><div class="dot" style="background:#C9A227"></div><div class="dot" style="background:#5E9C5B"></div><div class="browser-url">slab.app/account</div></div>
+      <div class="app-body">
+        <div class="rail">
+          <div class="rail-logo">S</div>
+          <div class="nav-icon-btn"><span data-icon="compass" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="search" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="recordDot" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="heart" data-color="var(--sage-dim)" data-size="19"></span></div>
+          <div class="nav-icon-btn active"><span data-icon="person" data-color="var(--gold)" data-size="19"></span></div>
+          <div class="nav-icon-btn"><span data-icon="gear" data-color="var(--sage-dim)" data-size="19"></span></div>
+        </div>
+        <div class="pane-web">
+          <div class="avatar" style="width:48px;height:48px;font-size:15px">DG</div>
+          <div class="ctx-heading" style="font-size:15px;margin-bottom:2px">Danny G.</div>
+          <div style="font-size:10.5px;color:var(--sage-dim);margin-bottom:14px">danny.godbout@gmail.com</div>
+          <div class="acct-stat-row">
+            <div class="acct-stat"><span class="stat-val" style="font-size:12.5px">37</span><span class="stat-lbl">Rides</span></div>
+            <div class="acct-stat"><span class="stat-val" style="font-size:12.5px">412km</span><span class="stat-lbl">Dist.</span></div>
+            <div class="acct-stat"><span class="stat-val" style="font-size:12.5px">6</span><span class="stat-lbl">OSM</span></div>
+          </div>
+          <div class="menu-row" style="font-size:12px">Help &amp; Support</div>
+          <div class="menu-row" style="color:var(--rust);font-size:12px">Sign Out</div>
+        </div>
+        <div class="map-area">
+          <div class="map-fill"></div>
+          <div class="map-controls web">
+            <div class="map-ctrl-btn"><span data-icon="person" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="crosshair" data-color="var(--gold)" data-size="16"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="arrowNorth" data-color="var(--gold)" data-size="15"></span></div>
+            <div class="map-ctrl-btn"><span data-icon="layers" data-color="var(--gold)" data-size="16"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="frame-caption">Settings has its own rail icon on web, so Account's menu is shorter here than on mobile — no Settings or Gear Garage row needed since Settings is a dedicated destination.</p>
+  </div>
+
+</div>
+
+<script>
+function iconSVG(name,opts){
+  opts = opts || {};
+  var size = opts.size || 20;
+  var color = opts.color || 'currentColor';
+  var FILLED = {recordDot:1,heartFilled:1,arrowNorth:1,pin:1,pause:1,stop:1,star:1};
+  var paths = {
+    compass:'<circle cx="12" cy="12" r="9"/><path d="M15.2 8.8l-2 4.4-4.4 2 2-4.4z"/>',
+    search:'<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.3" y2="16.3"/>',
+    recordDot:'<circle cx="12" cy="12" r="9"/>',
+    heart:'<path d="M12 21s-7.4-4.6-9.5-9.2C.9 8 2.4 4.5 5.7 4c2-.3 3.6.6 4.8 2.1C11.7 4.5 13.4 3.6 15.4 4c3.3.5 4.8 4 3.2 7.7C19.4 16.4 12 21 12 21z"/>',
+    heartFilled:'<path d="M12 21s-7.4-4.6-9.5-9.2C.9 8 2.4 4.5 5.7 4c2-.3 3.6.6 4.8 2.1C11.7 4.5 13.4 3.6 15.4 4c3.3.5 4.8 4 3.2 7.7C19.4 16.4 12 21 12 21z"/>',
+    person:'<circle cx="12" cy="8.2" r="3.6"/><path d="M4.3 20c.6-3.8 4-5.8 7.7-5.8s7.1 2 7.7 5.8"/>',
+    gear:'<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M4.2 7.5l2.2 1.3M17.6 15.2l2.2 1.3M4.2 16.5l2.2-1.3M17.6 8.8l2.2-1.3M3 12h2.5M18.5 12H21"/>',
+    arrowNorth:'<polygon points="12,3 17,20 12,16.3 7,20"/>',
+    crosshair:'<circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>',
+    layers:'<polygon points="12,4 20,8.2 12,12.4 4,8.2"/><polyline points="4,12.4 12,16.6 20,12.4"/><polyline points="4,16.6 12,20.8 20,16.6"/>',
+    back:'<polyline points="15,18 9,12 15,6"/>',
+    filter:'<line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/>',
+    chevronDown:'<polyline points="6,9 12,15 18,9"/>',
+    chevronRight:'<polyline points="9,6 15,12 9,18"/>',
+    plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    camera:'<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8.5 7l1.2-2h4.6l1.2 2"/><circle cx="12" cy="13" r="3.2"/>',
+    pin:'<path d="M12 22s6.5-6.8 6.5-11.5a6.5 6.5 0 00-13 0C5.5 15.2 12 22 12 22z"/>',
+    pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+    stop:'<rect x="5" y="5" width="14" height="14" rx="3"/>',
+    share:'<circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><line x1="8.2" y1="10.8" x2="15.8" y2="7"/><line x1="8.2" y1="13.2" x2="15.8" y2="17"/>',
+    star:'<polygon points="12,2.5 14.7,9 22,9.5 16.3,14 18.2,21 12,17 5.8,21 7.7,14 2,9.5 9.3,9"/>'
+  };
+  var filled = !!FILLED[name];
+  var attrs = filled ? ('fill="'+color+'" stroke="none"') : ('fill="none" stroke="'+color+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"');
+  return '<svg viewBox="0 0 24 24" width="'+size+'" height="'+size+'" '+attrs+'>'+(paths[name]||'')+'</svg>';
+}
+document.querySelectorAll('[data-icon]').forEach(function(el){
+  el.style.display='inline-flex';
+  el.innerHTML = iconSVG(el.dataset.icon, {size:+el.dataset.size||20, color:el.dataset.color||'currentColor'});
+});
+
+var MAP_SVG = ''
++'<rect width="400" height="400" fill="#EDE7D8"/>'
++'<path d="M-10,30 C20,15 55,35 45,80 C35,115 5,105 -10,125 Z" fill="#C7DCE0" opacity="0.8"/>'
++'<ellipse cx="130" cy="235" rx="95" ry="75" fill="#CFDAC4" opacity="0.85"/>'
++'<ellipse cx="305" cy="255" rx="70" ry="58" fill="#CFDAC4" opacity="0.75"/>'
++'<ellipse cx="55" cy="330" rx="55" ry="42" fill="#D6DEC9" opacity="0.7"/>'
++'<ellipse cx="230" cy="70" rx="60" ry="45" fill="#D6DEC9" opacity="0.6"/>'
++'<path d="M-10,145 C70,132 150,112 225,142 C285,165 340,182 410,172" stroke="#B9A276" stroke-width="2" fill="none" opacity="0.65"/>'
++'<path d="M45,-10 C55,55 62,120 56,185 C50,240 40,290 55,340" stroke="#B9A276" stroke-width="1.6" fill="none" opacity="0.55"/>'
++'<path d="M-10,205 C80,196 165,202 235,192 C300,183 350,172 410,160" stroke="#D9BD86" stroke-width="6" fill="none" opacity="0.9"/>'
++'<path d="M70,260 C85,230 105,205 130,190 C150,178 170,175 188,182 C202,188 210,202 205,216 C200,230 186,238 170,238 C156,238 145,230 142,218" stroke="#7C5FA0" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.85"/>'
++'<path d="M85,275 C100,245 118,218 140,200 C158,186 176,182 192,190 C206,197 212,212 205,226 C198,240 182,247 166,246 C152,245 141,236 140,222" stroke="#4C86AE" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.85"/>'
++'<path d="M100,290 C112,262 126,238 144,220 C158,206 172,199 184,202 C194,205 198,215 193,224" stroke="#3A3F3B" stroke-width="1.6" fill="none" stroke-linecap="round" opacity="0.8"/>'
++'<path d="M118,300 C126,278 136,258 148,244" stroke="#A8433A" stroke-width="1.6" fill="none" stroke-linecap="round" opacity="0.8"/>'
++'<path d="M130,296 C140,282 150,270 158,262 C166,254 172,250 176,252" stroke="#5E9C5B" stroke-width="1.8" fill="none" stroke-linecap="round" opacity="0.85"/>'
++'<path d="M275,235 C288,212 302,195 318,186 C330,180 342,180 350,188 C356,196 353,206 344,211" stroke="#7C5FA0" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.8"/>'
++'<path d="M285,250 C298,225 314,206 332,194 C344,187 356,187 364,196 C370,204 366,214 356,219" stroke="#4C86AE" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.8"/>'
++'<path d="M295,262 C306,242 320,226 334,216" stroke="#3A3F3B" stroke-width="1.6" fill="none" stroke-linecap="round" opacity="0.75"/>'
++'<path d="M300,272 C310,256 320,244 328,238" stroke="#5E9C5B" stroke-width="1.8" fill="none" stroke-linecap="round" opacity="0.8"/>'
++'<g fill="#C9A227">'
++'<path d="M0,-6 1.6,-1.6 6,0 1.6,1.6 0,6 -1.6,1.6 -6,0 -1.6,-1.6Z" transform="translate(130,192)"/>'
++'<path d="M0,-6 1.6,-1.6 6,0 1.6,1.6 0,6 -1.6,1.6 -6,0 -1.6,-1.6Z" transform="translate(320,188)"/>'
++'<path d="M0,-5 1.3,-1.3 5,0 1.3,1.3 0,5 -1.3,1.3 -5,0 -1.3,-1.3Z" transform="translate(60,150)"/>'
++'</g>'
++'<text x="130" y="245" fill="#2E3B33" font-size="11" font-weight="700" text-anchor="middle" font-family="-apple-system,Helvetica,sans-serif" letter-spacing="0.4">TIGER MOUNTAIN</text>'
++'<text x="320" y="230" fill="#2E3B33" font-size="9.5" font-weight="700" text-anchor="middle" font-family="-apple-system,Helvetica,sans-serif">RAGING RIVER</text>'
++'<text x="60" y="140" fill="#3A4A40" font-size="9" text-anchor="middle" font-family="-apple-system,Helvetica,sans-serif">Duthie Hill</text>'
++'<text x="230" y="60" fill="#3A4A40" font-size="9" text-anchor="middle" font-family="-apple-system,Helvetica,sans-serif">Snoqualmie</text>'
++'<text x="394" y="394" fill="#B7AE9C" font-size="7.5" text-anchor="end" font-family="-apple-system,sans-serif">© OpenStreetMap contributors</text>';
+
+var RECORD_OVERLAY = ''
++'<path d="M175,320 C180,300 184,278 182,258 C180,240 172,226 158,220" stroke="#B5453A" stroke-width="3" fill="none" stroke-linecap="round"/>'
++'<circle cx="158" cy="220" r="10" fill="rgba(181,69,58,0.18)"/>'
++'<circle cx="158" cy="220" r="5" fill="#B5453A" stroke="#F3EFE6" stroke-width="1.5"/>';
+
+document.querySelectorAll('.map-fill').forEach(function(el){
+  el.innerHTML = '<svg viewBox="0 0 400 400" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">'+MAP_SVG+'</svg>';
+});
+document.querySelectorAll('.map-fill.recording svg').forEach(function(svg){
+  svg.insertAdjacentHTML('beforeend', RECORD_OVERLAY);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,33 @@
+name: slab_steward
+description: "Rate trails and fill the gaps, straight into OpenStreetMap."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  crypto: ^3.0.6
+  http: ^1.6.0
+  maplibre: ^0.3.5
+  pointer_interceptor: ^0.10.1+2
+  url_launcher: ^6.3.2
+  web: ^1.1.1
+  flutter_svg: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  # Copied from docs/slab_assets, which is the sister SLAB app's handoff
+  # folder. Copies rather than references so a bundled asset can't be lost by
+  # someone tidying the docs tree — re-copy from there when SLAB updates them.
+  assets:
+    - assets/slab/
+    - assets/slab/difficulty/
