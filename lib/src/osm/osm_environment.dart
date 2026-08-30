@@ -76,4 +76,4 @@ enum OsmEnvironment {
 /// wiki page and the two-week community notice are live — see
 /// docs/specs/slab-steward-osm-changeset-spec.md §9-10. Nothing else about the
 /// build changes; the same OAuth app and the same reads serve both.
-const osmEnvironment = OsmEnvironment.dryRun;
+const osmEnvironment = OsmEnvironment.live;

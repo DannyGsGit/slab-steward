@@ -10,6 +10,7 @@ class StewardStats {
     required this.currentStreakDays,
     required this.firstEditAt,
     required this.lastEditAt,
+    required this.dailyTrails,
   });
 
   /// Changesets submitted through Steward.
@@ -30,6 +31,16 @@ class StewardStats {
   final DateTime? firstEditAt;
   final DateTime? lastEditAt;
 
+  /// Trails touched per calendar day, keyed by local midnight of that day
+  /// (the same day-bucketing [currentStreakDays] uses). Feeds the activity
+  /// chart and the contribution heatmap, which re-bucket it over a wider
+  /// window.
+  ///
+  /// Every day the rider opened a changeset has a key here, so the keys are
+  /// exactly the active days — a day whose changesets happened to touch
+  /// nothing still counts as active, and maps to 0.
+  final Map<DateTime, int> dailyTrails;
+
   bool get isEmpty => changesetCount == 0;
 
   factory StewardStats.from(List<OsmChangeset> changesets) {
@@ -41,13 +52,14 @@ class StewardStats {
         currentStreakDays: 0,
         firstEditAt: null,
         lastEditAt: null,
+        dailyTrails: {},
       );
     }
 
     var elementsChanged = 0;
     var firstEditAt = changesets.first.createdAt;
     var lastEditAt = changesets.first.createdAt;
-    final activeDays = <DateTime>{};
+    final dailyTrails = <DateTime, int>{};
     for (final changeset in changesets) {
       elementsChanged += changeset.changesCount;
       if (changeset.createdAt.isBefore(firstEditAt)) {
@@ -56,17 +68,23 @@ class StewardStats {
       if (changeset.createdAt.isAfter(lastEditAt)) {
         lastEditAt = changeset.createdAt;
       }
-      final day = changeset.createdAt;
-      activeDays.add(DateTime(day.year, day.month, day.day));
+      // Local, not UTC. OSM hands back `created_at` in UTC, and an evening
+      // edit anywhere west of Greenwich is already "tomorrow" there — bucket
+      // that by its UTC date and the rider's own streak reads zero on the day
+      // they just edited, and every window ending "today" misses the edit.
+      final created = changeset.createdAt.toLocal();
+      final day = DateTime(created.year, created.month, created.day);
+      dailyTrails[day] = (dailyTrails[day] ?? 0) + changeset.changesCount;
     }
 
     return StewardStats(
       changesetCount: changesets.length,
       elementsChanged: elementsChanged,
-      daysActive: activeDays.length,
-      currentStreakDays: _streakFrom(activeDays),
+      daysActive: dailyTrails.length,
+      currentStreakDays: _streakFrom(dailyTrails.keys.toSet()),
       firstEditAt: firstEditAt,
       lastEditAt: lastEditAt,
+      dailyTrails: dailyTrails,
     );
   }
 

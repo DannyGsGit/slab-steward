@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../state/steward_state.dart';
+import 'activity_chart.dart';
+import 'contribution_heatmap.dart';
 import 'slab_chrome.dart';
 import 'slab_theme.dart';
 
@@ -108,9 +110,10 @@ class _StatsBody extends StatelessWidget {
             children: [
               Expanded(
                 child: _StatTile(
-                  icon: Icons.emoji_events_outlined,
+                  icon: Icons.push_pin_outlined,
                   value: '${stats.changesetCount}',
                   label: 'CHANGESETS',
+                  badge: 'new',
                 ),
               ),
               const SizedBox(width: 10),
@@ -119,6 +122,7 @@ class _StatsBody extends StatelessWidget {
                   icon: Icons.route_outlined,
                   value: '${stats.elementsChanged}',
                   label: 'TRAILS TOUCHED',
+                  badge: 'new',
                 ),
               ),
             ],
@@ -143,6 +147,10 @@ class _StatsBody extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 14),
+          ActivitySection(stats: stats),
+          const SizedBox(height: 14),
+          ContributionHeatmap(stats: stats),
           if (stats.firstEditAt != null) ...[
             const SizedBox(height: 14),
             SlabSurface(
@@ -196,11 +204,17 @@ class _StatTile extends StatelessWidget {
     required this.icon,
     required this.value,
     required this.label,
+    this.badge,
   });
 
   final IconData icon;
   final String value;
   final String label;
+
+  /// A small pill in the tile's top-right corner, flagging a stat that's
+  /// newly shown here rather than the rider's actual best — see the "new"
+  /// tags on Changesets/Trails touched in the SLAB mockup.
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -209,7 +223,13 @@ class _StatTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 17, color: SlabColors.gold),
+          Row(
+            children: [
+              Icon(icon, size: 17, color: SlabColors.gold),
+              const Spacer(),
+              if (badge case final badge?) _NewBadge(label: badge),
+            ],
+          ),
           const SizedBox(height: 10),
           Text(
             value,
@@ -221,6 +241,30 @@ class _StatTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NewBadge extends StatelessWidget {
+  const _NewBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: SlabColors.ink600,
+      borderRadius: BorderRadius.circular(SlabRadii.pill),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(
+        fontSize: 9.5,
+        fontWeight: FontWeight.w700,
+        color: SlabColors.sage,
+        letterSpacing: 0.4,
+      ),
+    ),
+  );
 }
 
 class _SignedOutNotice extends StatelessWidget {
@@ -287,5 +331,9 @@ const _months = [
   'Dec',
 ];
 
-String _formatDate(DateTime date) =>
-    '${_months[date.month - 1]} ${date.day}, ${date.year}';
+// Local, to agree with the day-bucketing behind the streak and the charts —
+// OSM timestamps arrive in UTC, which is already tomorrow for an evening edit.
+String _formatDate(DateTime date) {
+  final local = date.toLocal();
+  return '${_months[local.month - 1]} ${local.day}, ${local.year}';
+}

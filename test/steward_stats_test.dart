@@ -73,4 +73,29 @@ void main() {
     final stats = StewardStats.from([_changeset(daysAgo(2))]);
     expect(stats.currentStreakDays, 0);
   });
+
+  // OSM hands back `created_at` in UTC, which is a different calendar date
+  // from the rider's own for part of every day: an evening edit west of
+  // Greenwich is already tomorrow in UTC, an early-morning one east of it is
+  // still yesterday. Bucketing on the UTC date put the edit in a day the
+  // rider hasn't lived through, which zeroed the streak on a day they'd just
+  // edited and dropped the edit out of every window ending "today".
+  test('an edit is counted on the rider\'s calendar day, not UTC\'s', () {
+    final today = DateTime(now.year, now.month, now.day);
+    // Both ends of the local day; in any non-zero UTC offset at least one of
+    // these falls on a different UTC date.
+    final earlyLocal = today.add(const Duration(hours: 0, minutes: 30));
+    final lateLocal = today.add(const Duration(hours: 23, minutes: 30));
+
+    for (final localTime in [earlyLocal, lateLocal]) {
+      final stats = StewardStats.from([_changeset(localTime.toUtc())]);
+      expect(
+        stats.dailyTrails.keys.single,
+        today,
+        reason: 'an edit at local $localTime belongs to $today',
+      );
+      expect(stats.daysActive, 1);
+      expect(stats.currentStreakDays, 1, reason: 'edited today, so on a streak');
+    }
+  });
 }
