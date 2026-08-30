@@ -1,23 +1,23 @@
 # Draft — OSM wiki page for SLAB Steward
 
-Target page: `https://wiki.openstreetmap.org/wiki/SLAB_Steward`
+Target page: `https://wiki.openstreetmap.org/wiki/Slab_Steward`
 
 ## Before publishing
 
 Placeholders are marked `TODO` in the source. The ones that need a real answer:
 
-- **`license`** — there is no `LICENSE` file in the repo. Pick one, or drop the
-  parameter. The infobox treats an empty license as unknown, which reads worse
-  than proprietary.
 - **`version` / `date`** — `pubspec.yaml` says `0.1.0+1`. Use whatever ships.
 - **`screenshot` / `logo`** — need uploading to the wiki first
   (Special:Upload), under a free license, then referenced by filename.
 - **Contact** — the page points complaints at "the contact above", meaning the
-  `author` field. Fill in an OSM username whose messages you'll actually read.
+  `author` field (DannySlab). Fill in an OSM username whose messages you'll actually read.
   Not an OEG requirement any more, but the page makes a promise of
   reachability and should keep it.
-- **`coverage`** — written as United States, on the basis that the discovery
-  layer is OSM US's trails tileset. Confirm before publishing.
+- ~~**`coverage`**~~ — resolved: worldwide. Editing goes through the OSM API
+  and OAuth, which are not geographically scoped, and the e-bike picker's
+  jurisdiction table already covers multiple countries. The discovery map's
+  tileset is presently OSM US's, which is a data-source limitation, not a
+  scope claim — worth a footnote if it isn't obvious from context.
 
 Two things in the source deliberately describe the app *as it will ship*, and
 are not true of the working tree yet:
@@ -38,14 +38,16 @@ are not true of the working tree yet:
 
 ## Scope claims worth checking against the code before you publish
 
-- Only difficulty is editable today (`mtb:scale:imba`). Surface and sanction
-  status are described as planned, because `TrailAttribute` has one value.
+- ~~Only difficulty is editable today.~~ Resolved: `TrailAttribute` has two
+  values, `difficulty` (`mtb:scale:imba`) and `electricBicycle`
+  (`electric_bicycle`). Surface and sanction status remain planned —
+  `TrailAttribute` doesn't have a third value yet.
 - No `check_date:*` is written. The product description §3.4 says it is, the
   changeset spec §8 recommends it, and the code does not — so the page doesn't
   claim it. Worth resolving in the code rather than in the page.
-- `created_by` is written as bare `SLAB Steward`, no version. Convention is
-  `Name Version`, and the changeset spec §6 asks for it. The page documents
-  what the code does.
+- ~~`created_by` is written as bare `SLAB Steward`, no version.~~ Resolved:
+  `submission_gate.dart` now writes `SLAB Steward/{version}`, matching the
+  `Name Version` convention the changeset spec §6 asks for.
 - No `source` changeset tag yet (README "Next" §2). Listed as planned.
 
 ---
@@ -56,19 +58,19 @@ are not true of the working tree yet:
 | name           = SLAB Steward
 | logo           = <!-- TODO: upload logo, e.g. SLAB_Steward_logo.svg -->
 | screenshot     = <!-- TODO: upload screenshot, e.g. SLAB_Steward_screenshot.png -->
-| author         = [[User:TODO|TODO]]
-| license        = <!-- TODO: no LICENSE file in the repository yet -->
+| author         = [[User:Danny Godbout|Danny Godbout]]
+| license        = MIT
 | platform       = web
 | status         = active
 | version        = 0.1.0
 | date           = <!-- TODO: YYYY-MM-DD of the first production release -->
 | languages      = EN
-| coverage       = United States
+| coverage       = worldwide
 | web            = https://slab-steward.web.app
 | repo           = https://github.com/DannyGsGit/slab-steward
 | code           = Dart
 | framework      = Flutter
-| description    = A guided browser editor for trail difficulty, e-bike access and surface, aimed at riders and walkers who know the trail but not the tagging.
+| description    = A guided browser editor for trail difficulty and e-bike access, aimed at riders and walkers who know the trail but not the tagging.
 | genre          = editor
 | map            = yes
 | mapData        = vector
@@ -93,34 +95,28 @@ are not true of the working tree yet:
 | issue tracker = https://github.com/DannyGsGit/slab-steward/issues
 }}
 
-'''SLAB Steward''' is a browser-based [[editor|OpenStreetMap editor]] for a
-single, narrow job: adding trail attributes that most trails in the United
-States are missing, in particular {{Tag|mtb:scale:imba}} difficulty ratings.
+'''SLAB Steward''' is a browser editor for one job: adding
+{{Tag|mtb:scale:imba}} difficulty and {{Key|electric_bicycle}} access to
+trails that are missing them.
 
-It is aimed at people who know a trail well but do not know OpenStreetMap's
-tagging — riders, hikers, trail crew, mountain bike association volunteers. The
-editor never shows a tag key. A rider picks the difficulty symbol they saw on
-the trailhead sign, and the app writes the corresponding tag. Everything else
-about the trail — geometry, name, access, the fifteen tags nobody is touching —
-is read from the API and echoed back unchanged.
+The experience is intentionally simplified. Users pick the difficulty symbol 
+as it would be shown on trailhead sign, Steward writes the correct tag.
 
-Every edit is made under the contributor's own OSM account via OAuth 2.0. There
-is no shared service account, and edits accrue to the person who made them.
+Edits go through user's own OSM account via OAuth 2.0. No shared or bot accounts are used.
 
-Try it at [https://slab-steward.web.app slab-steward.web.app].
+Try it at: [https://slab-steward.web.app slab-steward.web.app]
 <div style="clear:left"> </div>
 
 == What it edits ==
 
-Deliberately very little. Steward is a metadata editor for ''existing'' trail
-ways: it cannot draw a trail, move a node, split a way, add a POI, or edit a
-relation, and it is not intended to grow those abilities.
+Metadata on existing trail ways, nothing else. Steward cannot draw a trail,
+move a node, split a way, add a POI, or edit a relation. Sensitive tags
+representing sanctioned status are also scoped out.
 
 === Difficulty ===
 
-Steward writes {{Tag|mtb:scale:imba}} and nothing else on the difficulty axis.
-The picker is the IMBA circle/square/diamond signage scheme, because that is
-what riders read off the sign:
+Writes {{Tag|mtb:scale:imba}} only, using the IMBA circle/square/diamond
+signage scheme:
 
 {| class="wikitable"
 ! Picker label !! Symbol !! Tag written
@@ -140,146 +136,54 @@ what riders read off the sign:
 | Un-rated || gold ring || ''(no tag; absence is the un-rated state)''
 |}
 
-Two choices here are worth stating plainly, because both are visible in the
-resulting data:
-
-* '''{{Key|mtb:scale:imba}} rather than {{Key|mtb:scale}}.''' The wiki scopes
-  {{Key|mtb:scale:imba}} to purpose-built trails and recommends
-  {{Key|mtb:scale}} elsewhere; that scope has been disputed on the tagging list
-  for years, and in practice mappers use {{Key|mtb:scale:imba}} wherever a
-  trail carries signposted IMBA-style ratings. Steward follows the practice,
-  because it is the scale its users can actually read off a sign.
-  {{Key|mtb:scale}} asks for percent grade and obstacle height in centimetres,
-  which a layperson cannot self-assess, and a guess written confidently is
-  worse than a blank.
-* '''"Pro Line" writes 4, the same as Expert.''' The schema tops out at 4 and
-  Steward does not invent a 5. The extra distinction is kept outside OSM. The
-  UI says so at the point of choosing, rather than letting a rider believe OSM
-  carries it.
-
-'''Un-rated is not selectable.''' Choosing it would delete an existing rating,
-which is a destructive edit dressed up as a dropdown entry. Clearing a bad
-rating is not something Steward does yet.
+* '''{{Key|mtb:scale:imba}}, not {{Key|mtb:scale}}.''' Matches the signage
+  riders actually read. {{Key|mtb:scale}} support in development for regions outside
+  North America.
 
 === E-bike access ===
 
-Steward writes {{Key|electric_bicycle}}, through a two-option picker:
+Writes {{Key|electric_bicycle}}, yes/no only:
 
 {| class="wikitable"
 ! SLAB option !! What it claims !! OSM
 |-
-| Allowed || E-bikes may ride here, the same as any other bike. || {{Tag|electric_bicycle|yes}}
+| Allowed || E-bikes may ride here, same as any other bike. || {{Tag|electric_bicycle|yes}}
 |-
-| Not allowed || E-bikes are shut out, whether or not regular bikes are. || {{Tag|electric_bicycle|no}}
+| Not allowed || E-bikes are shut out, regardless of regular bikes. || {{Tag|electric_bicycle|no}}
 |}
 
-'''Yes and no, and nothing else.''' The key takes the full access vocabulary,
-and {{Tag|electric_bicycle|designated}} and {{Tag|electric_bicycle|permissive}}
-are correct on some trails — but neither is a reading a rider can take off a
-sign without interpreting it. "Designated" means a trail built or signposted
-''for'' e-bikes rather than merely open to them, and "permissive" is a claim
-about a landowner's intent. A picker that offers a choice its user cannot
-reliably make collects confident wrong answers, which is worse for the map than
-a narrower question answered well.
+Only yes/no. {{Tag|electric_bicycle|designated}} and
+{{Tag|electric_bicycle|permissive}} are valid OSM values, but both require a
+judgment call a rider can't make from a sign, so Steward doesn't offer them.
 
-Because {{Key|electric_bicycle}} is a sub-class of {{Key|bicycle}}, both
-options are about e-bikes ''specifically'' — "allowed" is not a statement that
-the trail allows bikes, and "not allowed" can be true on a trail that welcomes
-them. Steward shows that sentence beside each option while the picker is open
-and keeps the chosen one under it afterwards, rather than leaving a one-word
-label to carry it.
-
-E-bike access is one of the completeness questions: the lenses, the in-view
-list filter and the completeness indicator all ask for it alongside difficulty
-and surface. The picker's help text points at the trailhead sign or the land
-manager's rules as the source, because the failure mode for an access key is
-not a blank field, it is a confident guess about what riders are ''doing''.
-
-'''A value Steward cannot offer is never overwritten by one it can.''' An
-access key holds one value, so writing {{Tag|electric_bicycle|yes}} to a way
-already tagged {{Tag|electric_bicycle|designated}} would ''replace'' the more
-specific answer, not add to it — and in a forty-trail batch nobody would see it
-go. So Steward does not write those ways at all: the picker is replaced by the
-raw value, read-only, and a bulk apply skips them and says how many it skipped.
-Correcting such a value is a job for an editor that can show the rider what
-they are replacing. The same holds for {{Tag|electric_bicycle|permissive}},
-{{Tag|electric_bicycle|destination}} and the rest of the vocabulary; all of
-them still count as ''answered'' for completeness.
-
-{{Key|speed_pedelec}} is out of scope: Steward's picker is about pedelecs, and
-a rider reading a trailhead sign is not classifying vehicles by top speed.
-
-'''Nothing is selectable that would delete the tag,''' for the same reason
-un-rated is not selectable above.
+If a way already carries one of those values, Steward leaves it alone and the
+picker becomes read-only.
 
 === Planned ===
 
-{{Key|surface}} (through a similarly simplified picker mapping to standard
-values) and sanction status ({{Tag|informal|yes}}) are designed but not yet
-built. Sanction status will carry a mandatory written justification, because it
-is the field most likely to be contentious on the ground.
-
-{{Key|oneway}}, {{Key|smoothness}}, {{Key|width}} and {{Key|incline}} are out
-of scope for now.
-
-Subjective attributes — flow, fun, local difficulty calibration, trail
-conditions, closures, photos — are '''not''' written to OSM at all. They fail
-verifiability, and they belong in a separate store.
+{{Key|surface}}, {{Key|oneway}}, {{Key|smoothness}}, {{Key|width}}, {{Key|incline}}
+are out of scope for now but may incrementally be added.
 
 == How it works ==
 
-# '''Discover.''' The map draws trails from a vector tileset, coloured by
-  whether the attribute you are looking for is present or missing. Filters
-  narrow the view by travel mode (all / mountain biking / hiking) and by
-  completeness ("missing difficulty", "missing surface", "missing e-bike
-  access", "missing any").
-# '''Select.''' Click a trail, or ctrl-click (cmd-click on macOS) to build up a
-  working set — ctrl/cmd-''drag'' sweeps a box across the map and adds every
-  trail any part of it crosses. A list of every trail in the current viewport
-  can also be ticked through, including "select all" over a filter.
-# '''Edit.''' A guided picker per attribute, always live: choosing a value
-  stages it, and an undo beside the field walks it back. Changes are
-  ''staged'', not sent — they accumulate behind a counter and nothing has
-  reached OSM yet.
-# '''Review.''' The review sheet lists every staged change grouped by trail,
-  in plain language ("Difficulty: Not rated → Medium") '''and''' as the literal
-  tag diff, so a mapper can check exactly what will be written. Individual
-  changes can be dropped here. A meaningful changeset comment is required
-  before the submit button enables.
-# '''Submit.''' One changeset is opened under the contributor's own account,
-  the diff is uploaded atomically, the changeset is closed, and the result
-  links to osm.org.
+# '''Discover.''' Map colors trails by whether the attribute you're working on
+  is present or missing. Filter by travel mode and completeness.
+# '''Select.''' Click a trail, ctrl/cmd-click to add more, ctrl/cmd-drag to
+  box-select, or tick trails from a list.
+# '''Edit.''' Pick a value per attribute. Nothing is sent yet — changes stage
+  locally, with undo.
+# '''Review.''' Every staged change, in plain language and as the literal tag
+  diff. A real changeset comment is required before submit unlocks.
+# '''Submit.''' A changeset is created, all changes validated against API pulls,
+uploaded atomically, closed, and linked back to osm.org. All uploads tied to user's
+OSM account.
 
-=== Authoritative reads before every edit ===
+=== Reads before every edit ===
 
-Steward will not let you edit a trail whose current tags and version it has not
-read from the API. The pickers stay disabled until the read completes, and a
-bulk operation resolves every trail in the selection against the API — a few at
-a time — before it stages anything, reporting whatever it skipped.
-
-This is deliberate and it is the reason the tool is slower than it looks like it
-should be. The vector tiles the map draws from are a periodic build and lag the
-database by days; a changeset composed against tile data carries a stale version
-number and either fails with a 409 or, worse, echoes back a tag set that another
-mapper has already changed. Read-modify-write against the live API is the only
-correct way to make a one-field edit, so Steward does that every time.
-
-=== Bulk editing, and where it stops ===
-
-Applying one value across a selection — a rating, an e-bike permission, or
-both in one pass — produces '''one staged change per trail per attribute''',
-never a single opaque batch entry. The review sheet lists, explains
-and prunes each one individually, and the contributor sees every trail they are
-about to change, by name, with its own before-and-after.
-
-That is the line between a bulk editor and a
-[[Automated Edits code of conduct|mechanical edit]], and Steward is built to sit
-on the correct side of it: a human sees and confirms each object. Changesets are '''not''' tagged
-{{Tag|bot|yes}} or {{Tag|mechanical|yes}}, because they are not.
-
-Lasso and polygon selection are intentionally not implemented. "Set this value
-on everything inside this shape" is the shape of edit that cannot be reviewed
-per-object, and adding the gesture would quietly move the tool across that line.
+Steward reads current tags and version from the OSM API before it lets you edit, rather
+than rely on map tiles which lag the database by days. Editing against stale
+tile data risks a version conflict or silently overwriting someone else's
+edit. 
 
 == Changesets ==
 
@@ -288,9 +192,9 @@ Every changeset carries:
 {| class="wikitable"
 ! Tag !! Value
 |-
-| {{Key|created_by}} || <code>SLAB Steward</code>
+| {{Key|created_by}} || <code>SLAB Steward/''version''</code>, e.g. <code>SLAB Steward/0.1.0</code>
 |-
-| {{Key|comment}} || written by the contributor, required, must be more than one word
+| {{Key|comment}} || written by the contributor, required, more than one word
 |-
 | {{Key|hashtags}} || <code>#slabsteward</code>
 |-
@@ -298,56 +202,14 @@ Every changeset carries:
 |-
 | {{Key|locale}} || the contributor's UI language, e.g. <code>en-US</code>
 |-
-| {{Key|review_requested}} || <code>yes</code>, only when the contributor asks for review
+| {{Key|review_requested}} || <code>yes</code>, only if the contributor asks for review
 |}
 
-<code>#slabsteward</code> is appended to the comment automatically if the
-contributor has not typed it, so the whole corpus of Steward edits is
-queryable in [[OSMCha]] and the hashtag dashboards.
+<code>#slabsteward</code> is added automatically if missing, so the corpus of
+Steward edits is queryable in [[OSMCha]].
 
-'''The comment is not generated.''' Steward requires the contributor to write
-one and will not enable submit for <code>update</code>, <code>fix</code>, or a
-full stop. Machine-generated summaries of the form
-<code>BBOX:… ADD:0 UPD:47 DEL:0</code> are not produced. A changeset comment
-cannot be edited after the changeset closes, which is why the review sheet
-shows the exact text before it is sent.
-
-A {{Key|source}} changeset tag recording where the value came from (survey,
-local knowledge, operator records) is planned and not yet collected.
-
-Changesets are kept to one session in one area. Because the bounding box is
-drawn from the two farthest-apart objects in the changeset, a session that
-wanders between trail networks produces a box covering everything in between,
-which clutters every reviewer's filter in the region.
-
-== Attribution, and why this is not organised editing ==
-
-A tool that makes attribute edits easy, used by many accounts, invites the
-question, so it is answered here directly: SLAB Steward is '''not''' a
-coordinated editing activity, and is not registered under the
-[[Organised Editing Guidelines]]. Nobody is directed to edit, no area or trail
-is assigned, no participant is measured against a target, and there is no
-campaign or deadline. People who know a trail use the tool on their own
-initiative, on trails they choose, and stop when they feel like it.
-
-Attribution follows from that:
-
-* '''Edits are made under each contributor's own OSM account''', via OAuth 2.0.
-  There is no shared service account and no bot account. Edits accrue to the
-  person who made them, and a real person can answer a changeset comment.
-* '''{{Key|created_by}} names the tool''' on every changeset. That is the
-  authoritative software-attribution channel.
-* '''<code>#slabsteward</code>''' in {{Key|hashtags}} makes the corpus of
-  Steward edits queryable, so anyone can audit what the tool has done in their
-  area without having to identify its users first.
-
-If that ever changes — an association coordinating volunteers toward a target,
-a funded campaign, a deadline — it becomes organised editing, and an activity
-page under [[Organised Editing/Activities]] will be created before that work
-starts, not after.
-
-Questions or complaints about edits made with this tool are welcome on the
-changeset itself, on this page's talk page, or at the contact above.
+The comment is never auto-generated. Steward requires the contributor to
+write one, and rejects <code>update</code>, <code>fix</code>, or a full stop.
 
 == Data sources ==
 
@@ -356,53 +218,45 @@ changeset itself, on this page's talk page, or at the contact above.
 |-
 | Basemap style || [https://opentrailmap.us OpenTrailMap]'s published MapLibre stylesheet
 |-
-| Trail discovery layer || a vector tileset of OSM trail data <!-- TODO: name the host you actually ship with -->
+| Trail discovery layer || [https://tiles.openstreetmap.us OpenStreetMap US]'s vector tileset, used under its [https://tiles.openstreetmap.us/usage-policy/ usage policy]
 |-
-| Authoritative tags, geometry and version || the OSM API v0.6, read fresh on every selection
+| Authoritative tags, geometry, version || OSM API v0.6, read fresh on every selection
 |-
 | Sign-in and writes || OAuth 2.0 with PKCE against openstreetmap.org, under the contributor's own account
 |}
 
-No external or non-OSM data is imported into OSM by this tool. The only values
-written are ones a human picked from a list.
+No external data is imported into OSM. Every value is hand picked.
 
 == Rendering ==
 
-The map's conventions are ported from
-[https://github.com/osmus/OpenTrailMap OpenTrailMap] rather than invented, so
-that anyone who reads that map reads this one the same way: solid lines for
-official trails, dashed for {{Tag|informal|yes}}, pale tan with no-entry
-symbols where the selected travel mode is not allowed.
+Map styling follows [https://github.com/osmus/OpenTrailMap OpenTrailMap]'s
+conventions rather than inventing new ones: solid lines for official trails,
+dashed for {{Tag|informal|yes}}, pale with no-entry symbols where the
+selected travel mode isn't allowed.
 
-On top of that, a completeness lens colours trails teal where the attribute
-being worked on is present and magenta where it is missing — magenta is, in
-effect, the to-do list.
+A completeness lens colors trails teal (attribute present) or magenta
+(missing), i.e. magenta is the to-do list.
 
-One departure from OpenTrailMap is worth naming: trails that disallow the
-selected travel mode stay '''visible''', drawn pale, rather than being hidden.
-OpenTrailMap hides them; a steward still has to be able to click a trail in
-order to fix its tags, and a hidden trail cannot be clicked.
+One departure: trails that disallow the selected travel mode stay visible,
+drawn pale, instead of hidden, to remain clickable to fix their
+tags.
 
-Because the tileset lags the database, a trail whose rating you just submitted
-would keep drawing as unrated until the next tile build. Steward keeps a local
-record of tags it knows to be newer than the tiles — both what it submitted and
-what it read from the API — and restyles those trails accordingly, expiring
-each entry once the tileset's own build timestamp catches up.
+Because the tileset lags the database, a trail you just edited would draw as
+unrated until the next tile build. Steward keeps a local overlay of tags newer
+than the tiles and restyles those trails until the tileset catches up.
 
 == Limitations ==
 
-* Existing trail ways only. It cannot create, delete, split or reshape
-  anything, and it does not edit relations — including {{Tag|type|route}}
-  relations, which is where a named trail's attributes sometimes actually live.
-* One attribute (difficulty) today.
+* Existing trail ways only. No create, delete, split, reshape, or relation
+  editing.
+* Two attributes only today: difficulty and e-bike access.
 * No [[Notes|OSM Notes]] support.
-* Online only; no offline editing and no local cache of the editable data.
-* No imagery, no [[Imagery Offset Database|offset database]], no photo mapping.
-* Web only. Nothing in it is web-specific, and mobile is a later port.
+* Online only, no offline editing or local cache.
+* Web only, mobile planned for later.
 * English only.
 
-For anything outside that envelope, Steward links out to [[iD]] and
-[[JOSM]] rather than growing a general-purpose editing mode.
+For anything outside that, Steward links out to [[iD]] ways instead of
+growing a general-purpose editing mode.
 
 == See also ==
 
@@ -411,8 +265,6 @@ For anything outside that envelope, Steward links out to [[iD]] and
 * [[StreetComplete]] — the mobile original of the pattern
 * {{Key|mtb:scale:imba}}, {{Key|mtb:scale}}, {{Key|surface}}, {{Key|informal}},
   {{Key|electric_bicycle}}
-* [[Organised Editing Guidelines]]
-* [[Automated Edits code of conduct]]
 
 [[Category:Editors]]
 ```

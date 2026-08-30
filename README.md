@@ -3,6 +3,8 @@
 An OSM metadata editor for laypeople — find a trail you know, set its difficulty
 and surface, submit under your own OpenStreetMap account.
 
+OSM Wiki page: [Slab Steward Wiki](https://wiki.openstreetmap.org/wiki/Slab_Steward)
+
 Full scope in [docs/requirements/SLAB_Steward_Product_Description_v1.md](docs/requirements/SLAB_Steward_Product_Description_v1.md).
 
 ## Status
