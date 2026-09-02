@@ -156,6 +156,43 @@ void main() {
     });
   });
 
+  group('the rating a staged trail glows in', () {
+    StagedTrail staged(List<StagedEdit> edits) =>
+        StagedTrail(osmWayId: 42, edits: edits);
+
+    test('is the rating being staged', () {
+      final trail = staged([
+        StagedEdit.difficulty(_trail(), Difficulty.difficult),
+      ]);
+      expect(trail.resultingDifficulty, Difficulty.difficult);
+    });
+
+    test('is the rating OSM already carries when the edit is about something '
+        'else', () {
+      final trail = staged([
+        StagedEdit.electricBicycle(
+          _trail(tags: {'mtb:scale:imba': '2'}),
+          EbikeAccess.allowed,
+        ),
+      ]);
+      expect(trail.resultingDifficulty, Difficulty.medium);
+    });
+
+    test('is un-rated — the purple glow — when nothing says otherwise', () {
+      final trail = staged([
+        StagedEdit.electricBicycle(_trail(), EbikeAccess.notAllowed),
+      ]);
+      expect(trail.resultingDifficulty, Difficulty.unrated);
+    });
+
+    test('is Expert for a Pro Line, which is all OSM can carry', () {
+      final trail = staged([
+        StagedEdit.difficulty(_trail(), Difficulty.proLine),
+      ]);
+      expect(trail.resultingDifficulty, Difficulty.expert);
+    });
+  });
+
   group('StewardState staging', () {
     test('one pending change per attribute, however many times it is set', () {
       final state = StewardState();

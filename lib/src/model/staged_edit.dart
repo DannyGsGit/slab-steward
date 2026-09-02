@@ -249,6 +249,13 @@ class StagedTrail {
     return null;
   }
 
+  /// The rating this trail will carry once its edits land: the staged one
+  /// where difficulty is being edited, and whatever OSM already says where it
+  /// isn't. [Difficulty.unrated] when neither says anything — which is what
+  /// the map's purple glow means.
+  Difficulty get resultingDifficulty =>
+      Difficulty.fromImba(resultingTags[Difficulty.osmKey]);
+
   /// The pending e-bike permission, when one is among the staged edits. The
   /// map badge draws it beside [difficulty] — a trail can have both pending.
   EbikeAccess? get electricBicycle {

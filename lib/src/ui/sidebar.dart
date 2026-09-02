@@ -10,7 +10,6 @@ import 'selection_panel.dart';
 import 'slab_chrome.dart';
 import 'slab_theme.dart';
 import 'staged_changes.dart';
-import 'stats_panel.dart';
 import 'trail_list_panel.dart';
 import 'trail_panel.dart';
 
@@ -28,6 +27,10 @@ import 'trail_panel.dart';
 /// The sidebar sits *beside* the map rather than over it, so a click in the
 /// pane is not also a click on the map. See [PointerInterceptor] below for why
 /// that alone isn't enough on the web.
+///
+/// This is the wide-window layout. A phone-shaped window gets the same panes
+/// under a bottom bar instead — see [StewardBottomBar] — and both draw the
+/// open pane with the shared [SectionPane].
 class StewardSidebar extends StatelessWidget {
   const StewardSidebar({
     super.key,
@@ -101,20 +104,11 @@ class _Rail extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
-            _RailButton(
-              state: state,
-              section: SidebarSection.map,
-              icon: Icons.layers_outlined,
-            ),
-            _RailButton(
-              state: state,
-              section: SidebarSection.trails,
-              icon: Icons.format_list_bulleted,
-            ),
+            _RailButton(state: state, section: SidebarSection.map),
+            _RailButton(state: state, section: SidebarSection.trails),
             _RailButton(
               state: state,
               section: SidebarSection.selection,
-              icon: Icons.edit_location_alt_outlined,
               // Nothing to edit is not a pane worth opening, and a button
               // that opens an empty panel teaches nothing.
               enabled: state.hasSelection,
@@ -123,17 +117,9 @@ class _Rail extends StatelessWidget {
             _RailButton(
               state: state,
               section: SidebarSection.staged,
-              // A checkmark: what waits behind this button is work to approve
-              // and send, not more editing.
-              icon: Icons.check_circle_outline,
               badgeCount: state.stagedEditCount,
             ),
             const Spacer(),
-            _RailButton(
-              state: state,
-              section: SidebarSection.stats,
-              icon: Icons.emoji_events_outlined,
-            ),
             _RailButton(
               state: state,
               section: SidebarSection.account,
@@ -163,7 +149,6 @@ class _RailButton extends StatelessWidget {
   const _RailButton({
     required this.state,
     required this.section,
-    this.icon,
     this.child,
     this.enabled = true,
     this.badgeCount = 0,
@@ -172,8 +157,8 @@ class _RailButton extends StatelessWidget {
   final StewardState state;
   final SidebarSection section;
 
-  /// Either an [icon] or a [child] — the account button draws an avatar.
-  final IconData? icon;
+  /// Drawn instead of the section's own glyph — the account button wears an
+  /// avatar.
   final Widget? child;
 
   final bool enabled;
@@ -187,7 +172,7 @@ class _RailButton extends StatelessWidget {
     final content =
         child ??
         Icon(
-          icon,
+          section.icon,
           size: 19,
           color: !enabled
               ? SlabColors.sageDim.withValues(alpha: 0.4)
@@ -227,7 +212,7 @@ class _RailButton extends StatelessWidget {
   }
 }
 
-/// The open pane: a heading, a close control, and whatever the section is for.
+/// The open pane, beside the rail: framed to its section's width.
 class _Pane extends StatelessWidget {
   const _Pane({
     required this.state,
@@ -238,6 +223,54 @@ class _Pane extends StatelessWidget {
   final StewardState state;
   final SidebarSection section;
   final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: section.paneWidth.clamp(0.0, maxWidth),
+      decoration: const BoxDecoration(
+        color: SlabColors.ink800,
+        border: Border(right: BorderSide(color: SlabColors.line)),
+      ),
+      child: SafeArea(
+        right: false,
+        child: SectionPane(
+          state: state,
+          section: section,
+          closeTooltip: 'Collapse the sidebar',
+        ),
+      ),
+    );
+  }
+}
+
+/// What an open pane holds: a heading, a close control, and the section's own
+/// panel underneath.
+///
+/// Shared by both layouts. The rail frames it as a column beside the map and
+/// the bottom bar frames it as a band above one, but a pane is the same pane
+/// either way — anything that differed between them would be two products.
+class SectionPane extends StatelessWidget {
+  const SectionPane({
+    super.key,
+    required this.state,
+    required this.section,
+    required this.closeTooltip,
+    this.compact = false,
+  });
+
+  final StewardState state;
+  final SidebarSection section;
+
+  /// What the close control says on hover — the two layouts collapse to
+  /// different shapes, so they describe it differently.
+  final String closeTooltip;
+
+  /// Whether this is the phone layout's band rather than the rail's column.
+  /// The panes are the same either way; the few lines of copy that describe
+  /// how to work the map are not, because one of those windows is being
+  /// pointed at and the other is being touched.
+  final bool compact;
 
   /// What the heading says. Only the selection pane's title changes with the
   /// app's state — it names what is being edited, the way the floating panel
@@ -251,35 +284,24 @@ class _Pane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: section.paneWidth.clamp(0.0, maxWidth),
-      decoration: const BoxDecoration(
-        color: SlabColors.ink800,
-        border: Border(right: BorderSide(color: SlabColors.line)),
-      ),
-      child: SafeArea(
-        right: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            PanelHeader(
-              title: _title,
-              large: true,
-              closeTooltip: 'Collapse the sidebar',
-              onClose: state.closeSection,
-              trailing:
-                  section == SidebarSection.selection && state.hasSelection
-                  ? IconAction(
-                      icon: Icons.deselect,
-                      tooltip: 'Clear selection',
-                      onPressed: state.clearSelection,
-                    )
-                  : null,
-            ),
-            Expanded(child: _buildContent()),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PanelHeader(
+          title: _title,
+          large: true,
+          closeTooltip: closeTooltip,
+          onClose: state.closeSection,
+          trailing: section == SidebarSection.selection && state.hasSelection
+              ? IconAction(
+                  icon: Icons.deselect,
+                  tooltip: 'Clear selection',
+                  onPressed: state.clearSelection,
+                )
+              : null,
         ),
-      ),
+        Expanded(child: _buildContent()),
+      ],
     );
   }
 
@@ -287,20 +309,25 @@ class _Pane extends StatelessWidget {
     SidebarSection.map => MapControlsPanel(state: state),
     SidebarSection.trails => TrailListPanel(state: state),
     SidebarSection.selection => switch (state.selectionCount) {
-      0 => const _NothingSelected(),
+      0 => NothingSelectedNotice(compact: compact),
       // One trail gets the detail view; several get the bulk editor, which
       // applies one value across all of them.
       1 => TrailPanel(state: state),
       _ => SelectionPanel(state: state),
     },
     SidebarSection.staged => StagedChangesPanel(state: state),
-    SidebarSection.stats => StatsPanel(state: state),
     SidebarSection.account => AccountPanel(state: state),
   };
 }
 
-class _NothingSelected extends StatelessWidget {
-  const _NothingSelected();
+/// What the selection pane says before anything is picked.
+class NothingSelectedNotice extends StatelessWidget {
+  const NothingSelectedNotice({super.key, this.compact = false});
+
+  /// On a touch-shaped window the second line goes: box-select is a modified
+  /// drag, and there is no modifier key to hold. Telling a rider on a phone to
+  /// ctrl-drag a box teaches them only that the app was not built for them.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -311,16 +338,20 @@ class _NothingSelected extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Click a trail on the map to rate it.',
+            compact
+                ? 'Tap a trail on the map to rate it.'
+                : 'Click a trail on the map to rate it.',
             style: theme.textTheme.bodyMedium,
           ),
-          const SizedBox(height: 8),
-          Text(
-            '$multiSelectModifier-click a second trail — or '
-            '$multiSelectModifier-drag a box across several — to edit them '
-            'together.',
-            style: theme.textTheme.bodySmall,
-          ),
+          if (!compact) ...[
+            const SizedBox(height: 8),
+            Text(
+              '$multiSelectModifier-click a second trail — or '
+              '$multiSelectModifier-drag a box across several — to edit them '
+              'together.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
         ],
       ),
     );

@@ -3,88 +3,56 @@ import 'package:flutter/material.dart';
 import '../state/steward_state.dart';
 import 'activity_chart.dart';
 import 'contribution_heatmap.dart';
+import 'fields.dart';
 import 'slab_chrome.dart';
 import 'slab_theme.dart';
 
-/// What the rider has actually done through Steward, tallied up — the
-/// sidebar's stats pane.
+/// What the rider has actually done through Steward, tallied up — the top of
+/// the sidebar's Account pane.
+///
+/// A section rather than a pane of its own. Stats, the submitted changesets
+/// and the sign-out control are all answers to "what has this account done
+/// here", and they were fed by one fetch even while they lived behind two
+/// rail buttons — so the trophy button was a second door onto the same room.
+/// It builds a column, not a scroll view: the pane it sits in does the
+/// scrolling, so the sections beneath it scroll with it rather than inside it.
 ///
 /// Scoped to Steward's own changesets rather than the rider's whole OSM
 /// history: see [StewardState.stewardHashtag]. A mapper who's edited OSM for
-/// a decade would otherwise open this pane to a "streak" that has nothing to
-/// do with using this tool.
-class StatsPanel extends StatefulWidget {
-  const StatsPanel({super.key, required this.state});
-
-  final StewardState state;
-
-  @override
-  State<StatsPanel> createState() => _StatsPanelState();
-}
-
-class _StatsPanelState extends State<StatsPanel> {
-  @override
-  void initState() {
-    super.initState();
-    widget.state.auth.addListener(_onAuthChanged);
-    // Deferred a frame: loadStats's first act is a synchronous
-    // notifyListeners to flip on the loading flag, and calling that from
-    // initState — reentrant into the build that's mounting this very
-    // widget — trips Flutter's "don't mark a tree dirty while it's still
-    // being built" assertion.
-    if (widget.state.auth.isSignedIn) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) widget.state.loadStats();
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.state.auth.removeListener(_onAuthChanged);
-    super.dispose();
-  }
-
-  // Signing in while this pane is already open should fill it in; signing
-  // out should drop the last rider's numbers rather than leave them showing
-  // under a new name.
-  void _onAuthChanged() {
-    if (widget.state.auth.isSignedIn) {
-      widget.state.loadStats();
-    } else {
-      widget.state.clearStats();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: widget.state,
-      builder: (context, _) {
-        if (!widget.state.auth.isSignedIn) {
-          return const _SignedOutNotice();
-        }
-        return _StatsBody(state: widget.state);
-      },
-    );
-  }
-}
-
-class _StatsBody extends StatelessWidget {
-  const _StatsBody({required this.state});
+/// a decade would otherwise open this to a "streak" that has nothing to do
+/// with using this tool.
+class StatsSection extends StatelessWidget {
+  const StatsSection({super.key, required this.state});
 
   final StewardState state;
 
   @override
   Widget build(BuildContext context) {
+    if (!state.auth.isSignedIn) return const _SignedOutNotice();
+
     final theme = Theme.of(context);
     final stats = state.stats;
     final error = state.statsError;
     final isLoading = state.isLoadingStats;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('YOUR STATS', style: theme.textTheme.labelSmall),
+            ),
+            // One refresh for the whole pane: the tallies below and the
+            // changeset list under them come back from the same read.
+            IconAction(
+              icon: Icons.refresh,
+              tooltip: 'Refresh your stats and changesets',
+              onPressed: isLoading ? null : state.loadStats,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         if (isLoading && stats == null)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
@@ -165,8 +133,8 @@ class _StatsBody extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'First edit ${_formatDate(stats.firstEditAt!)}, '
-                      'most recent ${_formatDate(stats.lastEditAt!)}.',
+                      'First edit ${formatSlabDate(stats.firstEditAt!)}, '
+                      'most recent ${formatSlabDate(stats.lastEditAt!)}.',
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
@@ -184,21 +152,12 @@ class _StatsBody extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 16),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            icon: const Icon(Icons.refresh, size: 15),
-            label: const Text('Refresh'),
-            onPressed: isLoading ? null : state.loadStats,
-          ),
-        ),
       ],
     );
   }
 }
 
-/// One number, its glyph, and what it counts — the pane's whole vocabulary.
+/// One number, its glyph, and what it counts — the section's whole vocabulary.
 class _StatTile extends StatelessWidget {
   const _StatTile({
     required this.icon,
@@ -273,24 +232,21 @@ class _SignedOutNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Sign in to see what you\'ve done through Steward.',
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Stats are tallied from the changesets you\'ve submitted, so '
-            'there\'s nothing to show until you\'re signed in to an '
-            'OpenStreetMap account.',
-            style: theme.textTheme.bodySmall,
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Sign in to see what you\'ve done through Steward.',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Stats are tallied from the changesets you\'ve submitted, so '
+          'there\'s nothing to show until you\'re signed in to an '
+          'OpenStreetMap account.',
+          style: theme.textTheme.bodySmall,
+        ),
+      ],
     );
   }
 }
@@ -314,26 +270,4 @@ class _EmptyNotice extends StatelessWidget {
       ],
     );
   }
-}
-
-const _months = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
-// Local, to agree with the day-bucketing behind the streak and the charts —
-// OSM timestamps arrive in UTC, which is already tomorrow for an evening edit.
-String _formatDate(DateTime date) {
-  final local = date.toLocal();
-  return '${_months[local.month - 1]} ${local.day}, ${local.year}';
 }

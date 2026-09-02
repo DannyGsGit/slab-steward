@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Runs (or builds) Steward with the OSM OAuth client id from
-# secrets/vault.env, which is gitignored and never committed.
+# Runs (or builds) Steward with the OSM OAuth client id and the PostHog
+# analytics key from secrets/vault.env, which is gitignored and never
+# committed.
 #
 # There is one id, because there is one OpenStreetMap: both configurations in
 # lib/src/osm/osm_environment.dart use the production hosts and the production
@@ -43,6 +44,22 @@ if [[ -z "$CLIENT_ID" ]]; then
 fi
 
 DEFINES=(--dart-define="OSM_CLIENT_ID=$CLIENT_ID")
+
+# PostHog, for the product funnel in docs/specs/analytics.md. Optional, and
+# quietly so: an empty key disables analytics end to end — no library fetched,
+# no events queued, no network — which is what a contributor without the vault
+# entry should get rather than a build that won't start.
+POSTHOG_KEY="$(vault_get POSTHOG_API_KEY)"
+POSTHOG_HOST="$(vault_get POSTHOG_API_HOST)"
+
+if [[ -n "$POSTHOG_KEY" ]]; then
+  DEFINES+=(--dart-define="POSTHOG_API_KEY=$POSTHOG_KEY")
+  # A plain `[[ ... ]] && ...` would abort the whole script under `set -e`
+  # whenever the host is absent, which is exactly the tolerable case.
+  if [[ -n "$POSTHOG_HOST" ]]; then
+    DEFINES+=(--dart-define="POSTHOG_API_HOST=$POSTHOG_HOST")
+  fi
+fi
 
 if [[ $# -eq 0 ]]; then
   # 127.0.0.1 and a fixed port on purpose: OSM matches redirect URIs exactly,

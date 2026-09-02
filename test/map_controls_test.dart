@@ -64,7 +64,6 @@ void main() {
 
     state.setLenses({Lens.difficulty});
     await tester.pumpAndSettle();
-    expect(inLegend('Has difficulty'), findsOneWidget);
     expect(inLegend('Missing difficulty'), findsOneWidget);
 
     state.setLenses({Lens.access});
@@ -74,10 +73,41 @@ void main() {
       findsOneWidget,
       reason: 'the access rule asks about access, not about a missing tag',
     );
+  });
+
+  testWidgets('the rating colours are explained whatever is ticked', (
+    tester,
+  ) async {
+    final state = await pump(tester);
+
+    // A line's colour is its rating and nothing else, so the legend says so
+    // even with every rule cleared — see docs/specs/map_view.md.
+    for (final lenses in [Lens.values.toSet(), const <Lens>{}]) {
+      state.setLenses(lenses);
+      await tester.pumpAndSettle();
+      for (final tier in [
+        'Un-rated',
+        'Beginner & Easy',
+        'Medium',
+        'Difficult',
+        'Expert & Pro Line',
+      ]) {
+        expect(inLegend(tier), findsOneWidget, reason: tier);
+      }
+    }
+  });
+
+  testWidgets('the legend names the two glows that are always live', (
+    tester,
+  ) async {
+    await pump(tester);
+
+    // Neither depends on what is ticked: a trail is selected or it isn't, and
+    // it has an edit waiting on it or it doesn't.
+    expect(inLegend('Selected'), findsOneWidget);
     expect(
-      inLegend('Trail'),
+      inLegend('Change staged — glows the rating it will carry'),
       findsOneWidget,
-      reason: 'access alone leaves passing trails plain brown, as OTM does',
     );
   });
 

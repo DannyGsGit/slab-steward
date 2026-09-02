@@ -75,11 +75,12 @@ class Field extends StatelessWidget {
 /// A one-word state marker, in the design system's badge shape: a tinted pill
 /// carrying its own colour as text.
 ///
-/// Both colours are the map's, lifted a few stops so they hold up as small
-/// text on the dark chrome. Missing is the "OSM doesn't know this" purple the
-/// map draws unspecified trails in; staged is the blue the map glows a trail
-/// with once something is pending on it. Neither is gold — gold is what you
-/// press, and a badge is not a button.
+/// Missing is the map's own "OSM doesn't know this" purple — the colour an
+/// un-rated trail is drawn in — lifted a few stops so it holds up as small
+/// text on the dark chrome. Staged is blue, and deliberately borrows nothing
+/// from the map: the staged *glow* is the rating the edit will leave behind
+/// (`docs/specs/map_view.md`), so it has no one colour a badge could echo.
+/// Neither is gold — gold is what you press, and a badge is not a button.
 class StatusBadge extends StatelessWidget {
   const StatusBadge._(this.label, this.color, {super.key});
 

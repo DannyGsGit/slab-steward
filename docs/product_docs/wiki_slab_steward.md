@@ -231,14 +231,22 @@ No external data is imported into OSM. Every value is hand picked.
 
 Map styling follows [https://github.com/osmus/OpenTrailMap OpenTrailMap]'s
 conventions rather than inventing new ones: solid lines for official trails,
-dashed for {{Tag|informal|yes}}, pale with no-entry symbols where the
+dashed for {{Tag|informal|yes}}, faded with no-entry symbols where the
 selected travel mode isn't allowed.
 
-A completeness lens colors trails teal (attribute present) or magenta
-(missing), i.e. magenta is the to-do list.
+Line color is the trail's {{Tag|mtb:scale:imba}} rating, in the same signage
+colors SLAB puts on a trailhead sign: green for {{Tag|mtb:scale:imba|0}} and
+{{Tag|mtb:scale:imba|1}}, blue for {{Tag|mtb:scale:imba|2}}, black for
+{{Tag|mtb:scale:imba|3}}, red for {{Tag|mtb:scale:imba|4}}, and magenta where
+there is no rating at all.
+
+Everything else is said with a glow: golden where a trail matches the
+completeness rules the user has ticked — i.e. the golden trails are the to-do
+list — teal where it is selected, and its own rating's color where an edit is
+staged on it.
 
 One departure: trails that disallow the selected travel mode stay visible,
-drawn pale, instead of hidden, to remain clickable to fix their
+drawn faded, instead of hidden, to remain clickable to fix their
 tags.
 
 Because the tileset lags the database, a trail you just edited would draw as

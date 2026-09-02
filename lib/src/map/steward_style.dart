@@ -10,6 +10,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../model/difficulty.dart';
 import '../model/lens.dart';
 import '../model/trail_filters.dart';
 import 'otm_conventions.dart';
@@ -18,26 +19,58 @@ import 'otm_conventions.dart';
 const openTrailMapStyleUrl = 'https://opentrailmap.us/style.json';
 
 /// The public OSM US trails tileset. Carries `mtb:scale:imba`, `surface`,
-/// `informal`, `OSM_ID` and `OSM_VERSION` — everything the discovery half of
-/// Steward needs, without touching Overpass.
+/// `informal` and the rest of the tags the lenses read — everything the
+/// discovery half of Steward needs, without touching Overpass. Identity is
+/// the MVT feature id rather than a column; see [osmWayIdFromTileFeature].
 const _trailsTileJsonUrl = 'https://tiles.openstreetmap.us/vector/trails.json';
 
-const _trailsSourceId = 'trails';
-const _trailsSourceLayer = 'trail';
+/// The vector source and source-layer the overlay draws trails from. Public
+/// because the map view builds the selection layer at runtime — see
+/// [selectionLayerId].
+const trailsSourceId = 'trails';
+const trailsSourceLayer = 'trail';
 
-/// GeoJSON source holding the geometry of the currently selected trail.
+/// The glow under every trail in the working set.
 ///
-/// The Flutter MapLibre binding has no `setFeatureState`, so selection is drawn
-/// from its own source rather than as a feature-state highlight the way
-/// OpenTrailMap does it. Geometry arrives from the OSM API on selection.
-const selectionSourceId = 'steward-selection';
+/// Drawn from the trail tileset itself, filtered by feature id — the nearest
+/// thing the Flutter binding offers to OpenTrailMap's feature-state
+/// highlight, which it has no API for. Filtering beats drawing fetched
+/// geometry the way the staged glow does: a rider who drags a box over thirty
+/// trails sees thirty glows at once, and Steward still only reads the OSM API
+/// when there is an edit to compose. See [selectionFilter].
+const selectionLayerId = 'selected-trail';
+
+/// The layer the selection glow sits directly under — the lowest of the trail
+/// lines, so the glow reads as a halo behind them rather than a wash over
+/// them.
+///
+/// Named here because the map view re-adds the layer as the working set
+/// changes and `addLayer` positions by layer id; `steward_style_test` holds it
+/// to the real layer order.
+const selectionBelowLayerId = 'informal-paths';
 
 /// GeoJSON source holding the geometry of every trail with a pending edit.
 ///
-/// Same reason as [selectionSourceId] — no feature-state binding — but a
-/// separate source because the two are independent: a trail keeps its glow
-/// after the rider clicks away from it.
+/// Its own source rather than a filter like [selectionLayerId]: a staged trail
+/// keeps its glow after the rider clicks away, and it always has geometry —
+/// nothing can be staged against a trail the OSM API hasn't answered for.
 const stagedSourceId = 'steward-staged';
+
+/// The feature property [stagedSourceId] carries the glow colour in.
+///
+/// A style expression can't ask a [StagedTrail] what it will be rated, so the
+/// answer travels with the geometry — see `steward_map_view.dart`, which
+/// writes it, and `docs/specs/map_view.md` for why it is the difficulty.
+const stagedGlowColorKey = 'glowColor';
+
+/// The staged glow's colour, read off the feature. Purple for a trail that
+/// will still be un-rated once the edit lands — the same purple an un-rated
+/// line is drawn in.
+final Expr _stagedGlowColor = [
+  'coalesce',
+  ['get', stagedGlowColorKey],
+  difficultyColor(Difficulty.unrated),
+];
 
 /// Layer the map hit-tests against. A wide transparent line, so thin trails are
 /// still easy to click.
@@ -79,10 +112,10 @@ final Expr _selectedLineWidth = [
   13,
 ];
 
-/// The glow is drawn as two blurred lines rather than one: the wide outer
+/// Every glow is drawn as two blurred lines rather than one: the wide outer
 /// wash is what catches the eye from across the map, and the tighter inner
 /// pass keeps the trail's own line from looking washed out at close zoom.
-final Expr _stagedGlowWidth = [
+final Expr _glowWidth = [
   'interpolate',
   ['linear'],
   ['zoom'],
@@ -91,7 +124,7 @@ final Expr _stagedGlowWidth = [
   22,
   28,
 ];
-final Expr _stagedCoreWidth = [
+final Expr _glowCoreWidth = [
   'interpolate',
   ['linear'],
   ['zoom'],
@@ -100,6 +133,46 @@ final Expr _stagedCoreWidth = [
   22,
   15,
 ];
+
+/// Everything the overlay is willing to draw at all: a trail line, of a kind
+/// the rider hasn't switched off.
+Expr drawableFilter(Set<TrailKind> kinds, TagSource tags) => [
+  'all',
+  isHighway(tags),
+  isKindShown(kinds, tags),
+];
+
+/// Which trails glow as the working set: the ones named by [osmWayIds], and
+/// only those the map is drawing at all — a trail hidden by a kind toggle
+/// must not leave a glow behind with no line in it.
+///
+/// The ids are matched against the feature's own id, which is where the
+/// tileset keeps identity; see [tileFeatureIdForWay].
+Expr selectionFilter(
+  Iterable<int> osmWayIds, {
+  Set<TrailKind> kinds = const {...TrailKind.values},
+  TagSource tags = const TagSource.tiles(),
+}) => [
+  'all',
+  drawableFilter(kinds, tags),
+  [
+    'in',
+    ['id'],
+    [
+      'literal',
+      [for (final id in osmWayIds) tileFeatureIdForWay(id)],
+    ],
+  ],
+];
+
+/// Paint for [selectionLayerId] — one definition, shared by the style
+/// document and by the re-add that follows every change to the working set.
+Map<String, Object> selectionPaint() => {
+  'line-color': selectionColor,
+  'line-width': _selectedLineWidth,
+  'line-blur': 4,
+  'line-opacity': 0.8,
+};
 
 /// Everything a set of overlay layers is built from, resolved once per
 /// (mode, selection) pair.
@@ -133,9 +206,6 @@ class _OverlayContext {
     final tests => ['all', ...tests],
   };
 
-  /// Trails of a kind the rider hasn't switched off.
-  late final Expr shown = isKindShown(kinds, tags);
-
   /// One test per question the selection actually asks. [Lens.access] under
   /// [TravelMode.all] asks nothing, so it contributes nothing.
   late final List<Expr> _tests = [
@@ -158,8 +228,10 @@ class _OverlayContext {
     final tests => ['all', ...tests],
   };
 
-  /// Colour for trails that pass every selected lens.
-  String get passColor => lenses.tintsSpecified ? specifiedColor : trailColor;
+  /// Every trail line's colour: its IMBA rating. Nothing about the lens
+  /// selection enters into it — a highlighted trail keeps its rating and is
+  /// picked out with a glow instead. See `docs/specs/map_view.md`.
+  late final Expr color = difficultyLineColor(tags);
 
   /// OpenTrailMap hides trails the chosen mode can't use. Steward shows them
   /// pale and marked instead — the same visual vocabulary, but a steward still
@@ -167,7 +239,7 @@ class _OverlayContext {
   /// trail can't be clicked.
   bool get showsDisallowed => modes.isNotEmpty;
 
-  /// Nothing is purple when nothing is being asked.
+  /// Nothing glows gold when nothing is being asked.
   bool get showsUnspecified => _tests.isNotEmpty;
 }
 
@@ -178,9 +250,7 @@ Map<String, Expr> _trailFilters(_OverlayContext ctx) {
   final allowed = ctx.allowed;
   final specified = ctx.specified;
   final disallowed = <Object?>['!', allowed];
-  // Everything the overlay is willing to draw at all: a trail line, of a kind
-  // the rider hasn't switched off.
-  final drawable = <Object?>['all', isHighway(ctx.tags), ctx.shown];
+  final drawable = drawableFilter(ctx.kinds, ctx.tags);
 
   return {
     'paths': ['all', drawable, allowed, specified, formal],
@@ -218,6 +288,16 @@ Map<String, Expr> _trailFilters(_OverlayContext ctx) {
       ['!', specified],
       informal,
     ],
+    // Not a line layer: the union of the two unspecified ones, which is
+    // exactly what the Highlight rules are pointing at, and what the golden
+    // glow is drawn under.
+    'highlight': [
+      'all',
+      ctx.showsUnspecified,
+      drawable,
+      allowed,
+      ['!', specified],
+    ],
   };
 }
 
@@ -227,8 +307,8 @@ Map<String, Object?> _trailLine(
   Map<String, Object?> extra = const {},
 ]) => {
   'id': id,
-  'source': _trailsSourceId,
-  'source-layer': _trailsSourceLayer,
+  'source': trailsSourceId,
+  'source-layer': trailsSourceLayer,
   'type': 'line',
   'layout': {'line-cap': 'round', 'line-join': 'round'},
   'paint': paint,
@@ -241,30 +321,56 @@ List<Map<String, Object?>> _trailLayers(
   Map<String, Expr> filters,
   Expr combinedFilter,
 ) {
-  // Informal trails are dashed, as are trails the chosen mode isn't allowed on.
-  final lines = <(String, String, bool)>[
-    ('informal-paths', ctx.passColor, true),
-    ('disallowed-informal-paths', noAccessTrailColor, true),
-    ('unspecified-informal-paths', unspecifiedColor, true),
-    ('disallowed-paths', noAccessTrailColor, true),
+  // Every line is coloured by its rating; what differs between the layers is
+  // the *shape* of the line. Informal trails are dashed, as are trails the
+  // chosen mode isn't allowed on — and those are faded on top of it, so
+  // "you can't ride here" reads without spending a second colour on it.
+  final lines = <(String, bool, double)>[
+    ('informal-paths', true, 1),
+    ('disallowed-informal-paths', true, disallowedOpacity),
+    ('unspecified-informal-paths', true, 1),
+    ('disallowed-paths', true, disallowedOpacity),
   ];
-  final linesAboveSymbols = <(String, String, bool)>[
-    ('unspecified-paths', unspecifiedColor, false),
-    ('paths', ctx.passColor, false),
+  final linesAboveSymbols = <(String, bool, double)>[
+    ('unspecified-paths', false, 1),
+    ('paths', false, 1),
   ];
 
-  Map<String, Object?> lineLayer((String, String, bool) spec) {
-    final (id, color, isDashed) = spec;
+  Map<String, Object?> lineLayer((String, bool, double) spec) {
+    final (id, isDashed, opacity) = spec;
     return _trailLine(
       id,
       {
         'line-width': _lineWidth,
-        'line-color': color,
+        'line-color': ctx.color,
+        if (opacity != 1) 'line-opacity': opacity,
         if (isDashed) 'line-dasharray': [2, 2],
       },
       {'filter': filters[id]},
     );
   }
+
+  /// One pass of a glow: a wide blurred line under everything, in [color].
+  Map<String, Object?> glow(
+    String id,
+    String source,
+    Object? color, {
+    bool isCore = false,
+    Expr? filter,
+  }) => {
+    'id': id,
+    'source': source,
+    if (source == trailsSourceId) 'source-layer': trailsSourceLayer,
+    'type': 'line',
+    'layout': {'line-cap': 'round', 'line-join': 'round'},
+    'paint': {
+      'line-color': color,
+      'line-width': isCore ? _glowCoreWidth : _glowWidth,
+      'line-blur': isCore ? 3 : 8,
+      'line-opacity': isCore ? 0.55 : 0.35,
+    },
+    'filter': ?filter,
+  };
 
   return [
     _trailLine(
@@ -303,46 +409,43 @@ List<Map<String, Object?>> _trailLayers(
         ],
       },
     ),
+    // Bottom to top, in the order a steward reads them: what the Highlight
+    // rules found, what has an edit waiting on it, and what is in hand.
+    glow(
+      'highlight-glow',
+      trailsSourceId,
+      highlightGlowColor,
+      filter: filters['highlight'],
+    ),
+    glow(
+      'highlight-glow-core',
+      trailsSourceId,
+      highlightGlowColor,
+      isCore: true,
+      filter: filters['highlight'],
+    ),
+    // Per-feature rather than one colour for the lot: a staged trail glows in
+    // the difficulty it will carry once the edit lands — purple where that is
+    // still nothing. [stagedGlowColorKey] is written into the source.
+    glow('staged-glow', stagedSourceId, _stagedGlowColor),
+    glow('staged-glow-core', stagedSourceId, _stagedGlowColor, isCore: true),
+    // Starts empty and is re-added with the working set's ids whenever that
+    // set changes — the binding has no way to reach into a filter, so the
+    // layer is replaced rather than edited. See `steward_map_view.dart`.
     {
-      'id': 'staged-glow',
-      'source': stagedSourceId,
+      'id': selectionLayerId,
+      'source': trailsSourceId,
+      'source-layer': trailsSourceLayer,
       'type': 'line',
       'layout': {'line-cap': 'round', 'line-join': 'round'},
-      'paint': {
-        'line-color': stagedEditColor,
-        'line-width': _stagedGlowWidth,
-        'line-blur': 8,
-        'line-opacity': 0.35,
-      },
-    },
-    {
-      'id': 'staged-glow-core',
-      'source': stagedSourceId,
-      'type': 'line',
-      'layout': {'line-cap': 'round', 'line-join': 'round'},
-      'paint': {
-        'line-color': stagedEditColor,
-        'line-width': _stagedCoreWidth,
-        'line-blur': 3,
-        'line-opacity': 0.55,
-      },
-    },
-    {
-      'id': 'selected-trail',
-      'source': selectionSourceId,
-      'type': 'line',
-      'layout': {'line-cap': 'round', 'line-join': 'round'},
-      'paint': {
-        'line-color': selectionColor,
-        'line-width': _selectedLineWidth,
-        'line-opacity': 0.75,
-      },
+      'paint': selectionPaint(),
+      'filter': selectionFilter(const [], kinds: ctx.kinds, tags: ctx.tags),
     },
     ...lines.map(lineLayer),
     {
       'id': 'disallowed-symbols',
-      'source': _trailsSourceId,
-      'source-layer': _trailsSourceLayer,
+      'source': trailsSourceId,
+      'source-layer': trailsSourceLayer,
       'type': 'symbol',
       'minzoom': 13,
       'filter': [
@@ -369,8 +472,8 @@ List<Map<String, Object?>> _trailLayers(
     ...linesAboveSymbols.map(lineLayer),
     {
       'id': 'trails-labels',
-      'source': _trailsSourceId,
-      'source-layer': _trailsSourceLayer,
+      'source': trailsSourceId,
+      'source-layer': trailsSourceLayer,
       'type': 'symbol',
       'minzoom': 14,
       'filter': ['all', ctx.tags.has('name'), combinedFilter],
@@ -389,8 +492,8 @@ List<Map<String, Object?>> _trailLayers(
     },
     {
       'id': pointerTargetLayerId,
-      'source': _trailsSourceId,
-      'source-layer': _trailsSourceLayer,
+      'source': trailsSourceId,
+      'source-layer': trailsSourceLayer,
       'type': 'line',
       'paint': {'line-color': 'transparent', 'line-width': 16},
       'filter': combinedFilter,
@@ -428,19 +531,17 @@ Map<String, Object?> buildStewardStyle(
   TagSource tags = const TagSource.tiles(),
 }) {
   final sources = baseStyle['sources'] as Map<String, Object?>;
-  sources[_trailsSourceId] = {
+  sources[trailsSourceId] = {
     'type': 'vector',
     'url': _trailsTileJsonUrl,
     'attribution':
         'Trails © <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> '
         'contributors, tiles by <a href="https://openstreetmap.us">OpenStreetMap US</a>',
   };
-  for (final id in [selectionSourceId, stagedSourceId]) {
-    sources[id] = {
-      'type': 'geojson',
-      'data': jsonDecode(_emptyFeatureCollection),
-    };
-  }
+  sources[stagedSourceId] = {
+    'type': 'geojson',
+    'data': jsonDecode(_emptyFeatureCollection),
+  };
 
   final layers = (baseStyle['layers'] as List).cast<Map<String, Object?>>();
 
@@ -472,7 +573,7 @@ Map<String, Object?> buildStewardStyle(
   // The kind toggles ride along here rather than being a seventh layer: a
   // hidden kind is hidden from the labels and the hit targets too, or a rider
   // would still be able to click the sidewalk they just switched off.
-  final combinedFilter = <Object?>['all', isHighway(ctx.tags), ctx.shown];
+  final combinedFilter = drawableFilter(ctx.kinds, ctx.tags);
 
   final overlay = _trailLayers(
     ctx,

@@ -11,9 +11,16 @@ import 'package:slab_steward/src/ui/stats_panel.dart';
 const _changesetsJson =
     '{"changesets":['
     '{"id":1,"created_at":"2024-01-01T10:00:00Z","changes_count":3,'
-    '"tags":{"comment":"rate a few trails"}},'
+    '"tags":{"comment":"rate a few trails #slabsteward",'
+    '"hashtags":"#slabsteward"}},'
     '{"id":2,"created_at":"2024-01-02T09:00:00Z","changes_count":1,'
-    '"tags":{"comment":"one more"}}'
+    '"tags":{"comment":"one more #slabsteward",'
+    '"hashtags":"#slabsteward"}},'
+    // Not Steward's work. OSM has no server-side hashtag filter, so this
+    // comes back with the rest and the client has to leave it out — the
+    // whole point of the pane being about *this* tool.
+    '{"id":3,"created_at":"2024-02-01T09:00:00Z","changes_count":99,'
+    '"tags":{"comment":"years of other mapping"}}'
     ']}';
 
 Future<StewardState> _pumpPanel(
@@ -45,14 +52,23 @@ Future<StewardState> _pumpPanel(
     auth: auth,
   );
   addTearDown(state.dispose);
+  // The Account pane the section lives in owns the fetch — one read feeds the
+  // tallies, the changeset list and the count on its fold. The section only
+  // has to render what came back.
+  if (signedIn) await state.loadStats();
 
   await tester.pumpWidget(
     MaterialApp(
       theme: slabTheme(),
       home: Scaffold(
+        // The section is a column, not a scroll view — the Account pane it
+        // lives in does the scrolling. Here that pane is one ListView.
         body: ListenableBuilder(
           listenable: state,
-          builder: (context, _) => StatsPanel(state: state),
+          builder: (context, _) => ListView(
+            padding: const EdgeInsets.all(20),
+            children: [StatsSection(state: state)],
+          ),
         ),
       ),
     ),
@@ -62,9 +78,8 @@ Future<StewardState> _pumpPanel(
 }
 
 void main() {
-  testWidgets('signed out asks for sign-in rather than fetching', (
-    tester,
-  ) async {
+  testWidgets('signed out asks for sign-in rather than showing empty '
+      'tallies', (tester) async {
     final state = await _pumpPanel(tester);
 
     expect(
@@ -109,5 +124,19 @@ void main() {
     expect(state.statsError, isNotNull);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.textContaining('500'), findsOneWidget);
+  });
+
+  // One read feeds the stats and the changeset list under them, so the pane
+  // asks for it once, from here.
+  testWidgets('the heading carries the pane\'s one refresh', (tester) async {
+    final state = await _pumpPanel(tester, signedIn: true);
+    state.clearStats();
+    await tester.pumpAndSettle();
+    expect(state.stats, isNull);
+
+    await tester.tap(find.byTooltip('Refresh your stats and changesets'));
+    await tester.pumpAndSettle();
+
+    expect(state.stats?.changesetCount, 2);
   });
 }

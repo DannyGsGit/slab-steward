@@ -43,6 +43,23 @@ const _clickSlop = 8.0;
 Color _opaque(String hex) =>
     Color(int.parse(hex.substring(1), radix: 16) | 0xFF000000);
 
+/// What Steward passes on for a feature the map reported: the tile's own
+/// attributes, plus the OSM way id filed under [tileIdKey].
+///
+/// The id has to be spliced in because the tileset no longer carries it as an
+/// attribute — it moved to the MVT feature id, which is what
+/// [osmWayIdFromTileFeature] decodes. Doing it here, at the one seam where
+/// MapLibre hands features over, keeps every reader downstream working in
+/// property bags as before.
+///
+/// Null for a feature with no way id behind it: not something a steward can
+/// edit, so not something to hand on.
+Map<String, Object?>? _tileReading(RenderedFeature hit) {
+  final osmWayId = osmWayIdFromTileFeature(hit.id);
+  if (osmWayId == null) return null;
+  return {...hit.properties, tileIdKey: osmWayId};
+}
+
 class _StewardMapViewState extends State<StewardMapView> {
   MapController? _controller;
   StyleController? _style;
@@ -55,9 +72,13 @@ class _StewardMapViewState extends State<StewardMapView> {
   int _appliedStyleRevision = -1;
   int _appliedStagedRevision = -1;
 
-  /// The way ids currently drawn in the selection source, so a rebuild that
-  /// didn't change the working set doesn't re-encode it.
-  String? _appliedHighlight;
+  /// The way ids the selection glow is currently filtered to, so a rebuild
+  /// that didn't change the working set doesn't swap the layer for an
+  /// identical one.
+  String? _appliedSelection;
+
+  /// Selection-layer swaps, one after another — see [_replaceSelectionLayer].
+  Future<void> _selectionWork = Future.value();
 
   bool _appliedListOpen = false;
 
@@ -144,22 +165,28 @@ class _StewardMapViewState extends State<StewardMapView> {
     }
   }
 
+  /// Where the map's expressions read tags from: the tiles, corrected by
+  /// anything Steward knows to be fresher than them.
+  TagSource _tagSource() {
+    final overrides = widget.state.overrides;
+    return overrides.isEmpty
+        ? const TagSource.tiles()
+        : TagSource.overriding(overrides.byTileId);
+  }
+
   /// A fresh style document for the current mode and lens selection.
   ///
   /// [buildStewardStyle] mutates what it's given, so this re-decodes the cached
   /// base each time rather than handing over the same map twice.
   String _currentStyleJson() {
     final base = jsonDecode(jsonEncode(_baseStyle)) as Map<String, Object?>;
-    final overrides = widget.state.overrides;
     return jsonEncode(
       buildStewardStyle(
         base,
         modes: widget.state.modes,
         lenses: widget.state.lenses,
         kinds: widget.state.kinds,
-        tags: overrides.isEmpty
-            ? const TagSource.tiles()
-            : TagSource.overriding(overrides.byTileId),
+        tags: _tagSource(),
       ),
     );
   }
@@ -170,13 +197,14 @@ class _StewardMapViewState extends State<StewardMapView> {
     if (state.styleRevision != _appliedStyleRevision && _baseStyle != null) {
       _appliedStyleRevision = state.styleRevision;
       _controller?.setStyle(_currentStyleJson());
-      // setStyle resets every source, so the highlight and the glow have to be
-      // re-pushed once the new style reports in via onStyleLoaded.
-      _appliedHighlight = null;
+      // A new style document replaces the selection layer with the empty one
+      // it ships and resets every source, so both have to be re-applied once
+      // it reports in via onStyleLoaded.
+      _appliedSelection = null;
       _appliedStagedRevision = -1;
     }
 
-    _syncHighlight();
+    _syncSelection();
     _syncStagedGlow();
 
     // Opening the list is a question about the current viewport, so it gets
@@ -205,7 +233,7 @@ class _StewardMapViewState extends State<StewardMapView> {
       Offset.zero & box.size,
       layerIds: [pointerTargetLayerId],
     );
-    widget.state.setVisibleTrails([for (final hit in hits) hit.properties]);
+    widget.state.setVisibleTrails([for (final hit in hits) ?_tileReading(hit)]);
   }
 
   /// Pushes the geometry of every trail with a pending edit into the glow
@@ -220,7 +248,19 @@ class _StewardMapViewState extends State<StewardMapView> {
         'type': 'FeatureCollection',
         'features': [
           for (final trail in widget.state.stagedTrails)
-            ?trail.toGeoJsonFeature(),
+            if (trail.toGeoJsonFeature() case final feature?)
+              {
+                ...feature,
+                // The glow is the difficulty the edit will leave behind, so
+                // the colour has to travel with the geometry — a style
+                // expression can't ask a [StagedTrail] anything.
+                'properties': {
+                  ...?(feature['properties'] as Map<String, Object?>?),
+                  stagedGlowColorKey: difficultyColor(
+                    trail.resultingDifficulty,
+                  ),
+                },
+              },
         ],
       }),
     );
@@ -231,32 +271,65 @@ class _StewardMapViewState extends State<StewardMapView> {
     });
   }
 
-  /// Pushes the geometry of every selected trail into the highlight source.
+  /// Points the selection glow at whatever is in the working set.
   ///
-  /// Geometry only exists once the OSM API responds, so a freshly clicked trail
-  /// is a no-op on the first notification and does the real work on the second.
-  /// Trails ticked in bulk from the list have no geometry until something asks
-  /// for it — the list itself is their feedback, and the map picks them up as
-  /// they resolve.
-  void _syncHighlight() {
-    final style = _style;
-    if (style == null) return;
+  /// Every way in it, however it got there: a click, a ctrl/cmd-click, a box
+  /// dragged over thirty trails, or a row ticked in the in-view list. The
+  /// glow is a filter over the tileset, so none of them has to wait on the
+  /// OSM API — which matters most for the box, since a bulk selection
+  /// deliberately reads nothing until there is an edit to compose.
+  void _syncSelection() {
+    if (_style == null) return;
 
-    final drawable = [
-      for (final trail in widget.state.selectedTrails)
-        if (trail.geometry != null) trail,
-    ];
-    final signature = drawable.map((t) => t.osmWayId).join(',');
-    if (signature == _appliedHighlight) return;
-    _appliedHighlight = signature;
+    final ids = [
+      for (final trail in widget.state.selectedTrails) trail.osmWayId,
+    ]..sort();
+    final signature = ids.join(',');
+    if (signature == _appliedSelection) return;
+    _appliedSelection = signature;
+    _replaceSelectionLayer(ids);
+  }
 
-    style.updateGeoJsonSource(
-      id: selectionSourceId,
-      data: jsonEncode({
-        'type': 'FeatureCollection',
-        'features': [for (final trail in drawable) trail.toGeoJsonFeature()],
-      }),
-    );
+  /// Swaps the selection layer for one filtered to [osmWayIds].
+  ///
+  /// A layer's filter can't be reached through the Flutter binding, so the
+  /// layer is replaced. The calls are futures, and two selections in quick
+  /// succession would otherwise race into "a layer with that id already
+  /// exists", so they queue behind each other.
+  void _replaceSelectionLayer(List<int> osmWayIds) {
+    _selectionWork = _selectionWork
+        .then((_) async {
+          final style = _style;
+          if (style == null || !mounted) return;
+          // The style document ships this layer, so it is normally there to
+          // take away; a swap that failed part-way is the one case it isn't,
+          // and the add below is what puts things right again.
+          try {
+            await style.removeLayer(selectionLayerId);
+          } catch (_) {}
+          await style.addLayer(
+            LineStyleLayer(
+              id: selectionLayerId,
+              sourceId: trailsSourceId,
+              sourceLayerId: trailsSourceLayer,
+              layout: const {'line-cap': 'round', 'line-join': 'round'},
+              paint: selectionPaint(),
+              // `Expr` is a list of nullables and the binding wants one of
+              // non-nullables; no filter Steward builds carries a null.
+              filter: selectionFilter(
+                osmWayIds,
+                kinds: widget.state.kinds,
+                tags: _tagSource(),
+              ).cast<Object>(),
+              minZoom: overlayMinZoom,
+            ),
+            belowLayerId: selectionBelowLayerId,
+          );
+        })
+        // A failed swap must not leave every later one queued behind it.
+        .catchError((Object error) {
+          debugPrint('Could not redraw the selection glow: $error');
+        });
   }
 
   /// Turns the box just dragged into a selection: every trail with any part
@@ -277,7 +350,7 @@ class _StewardMapViewState extends State<StewardMapView> {
     // A box that caught nothing is a miss, not "clear everything" — the same
     // reading a modified click on empty map gets.
     if (hits == null || hits.isEmpty) return;
-    widget.state.addFromTiles([for (final hit in hits) hit.properties]);
+    widget.state.addFromTiles([for (final hit in hits) ?_tileReading(hit)]);
   }
 
   /// Drops the box and gives the map its gestures back.
@@ -319,10 +392,12 @@ class _StewardMapViewState extends State<StewardMapView> {
       if (!addsToSelection) widget.state.clearSelection();
       return;
     }
+    final reading = _tileReading(hits.first);
+    if (reading == null) return;
     if (addsToSelection) {
-      widget.state.toggleFromTile(hits.first.properties);
+      widget.state.toggleFromTile(reading);
     } else {
-      widget.state.selectFromTile(hits.first.properties);
+      widget.state.selectFromTile(reading);
     }
   }
 
@@ -416,9 +491,9 @@ class _StewardMapViewState extends State<StewardMapView> {
       onMapCreated: (controller) => _controller = controller,
       onStyleLoaded: (style) {
         _style = style;
-        _appliedHighlight = null;
+        _appliedSelection = null;
         _appliedStagedRevision = -1;
-        _syncHighlight();
+        _syncSelection();
         _syncStagedGlow();
         // A new style means new filters, and the list only ever shows what the
         // map is actually drawing.
@@ -449,25 +524,37 @@ class _StewardMapViewState extends State<StewardMapView> {
           Marker(
             point: Geographic(lon: point[0], lat: point[1]),
             size: _StagedBadge.sizeFor(trail.difficulty, trail.electricBicycle),
-            child: _StagedBadge(trail.difficulty, trail.electricBicycle),
+            child: _StagedBadge(
+              trail.difficulty,
+              trail.electricBicycle,
+              ringColor: _opaque(difficultyColor(trail.resultingDifficulty)),
+            ),
           ),
   ];
 }
 
 /// The pending edits as they read on the map: the same signage glyph and
-/// e-bike glyph the panel shows, on a chip ringed in the glow's blue so
-/// they're legible against whatever the trail is crossing.
+/// e-bike glyph the panel shows, on a chip ringed in the colour of the glow
+/// under it so the chip and the trail read as one thing.
 ///
 /// Ink rather than white — this is chrome, and SLAB's chrome is dark whatever
 /// the basemap under it is doing. The signage chips carry their own gold
 /// outline, so they read against it the way they read on a trail sign.
 class _StagedBadge extends StatelessWidget {
-  const _StagedBadge(this.difficulty, this.electricBicycle);
+  const _StagedBadge(
+    this.difficulty,
+    this.electricBicycle, {
+    required this.ringColor,
+  });
 
   /// Null when that attribute has nothing pending — at least one of the two
   /// is always set, or the badge wouldn't have been built.
   final Difficulty? difficulty;
   final EbikeAccess? electricBicycle;
+
+  /// The glow's colour under this badge — the difficulty the trail will carry
+  /// once the edit lands. See [difficultyColor].
+  final Color ringColor;
 
   static const _glyphSize = 13.0;
   static const _padding = 4.0;
@@ -498,7 +585,7 @@ class _StagedBadge extends StatelessWidget {
         decoration: BoxDecoration(
           color: SlabColors.ink900,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: _glowColor, width: 1.5),
+          border: Border.all(color: ringColor, width: 1.5),
           boxShadow: const [
             BoxShadow(
               color: Color(0x59000000),
@@ -521,14 +608,12 @@ class _StagedBadge extends StatelessWidget {
       ),
     );
   }
-
-  static final Color _glowColor = _opaque(stagedEditColor);
 }
 
 /// The rubber band a ctrl/cmd-drag draws across the map.
 ///
-/// In the same yellow the map highlights a selected trail with, so the box and
-/// what it will leave behind read as one gesture. Filled rather than outlined
+/// In the same teal the map glows a selected trail with, so the box and what
+/// it will leave behind read as one gesture. Filled rather than outlined
 /// alone: the fill is what says the trails under it are what's being named.
 class _SelectionBox extends StatelessWidget {
   const _SelectionBox();

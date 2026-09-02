@@ -21,6 +21,8 @@ Object? evaluate(Object? expr, Map<String, Object?> props) {
       return args[0];
     case 'get':
       return props[args[0] as String];
+    case 'id':
+      return props[featureIdKey];
     case 'has':
       return props.containsKey(args[0] as String);
     case 'to-string':
@@ -64,6 +66,22 @@ Object? evaluate(Object? expr, Map<String, Object?> props) {
   }
 }
 
+/// Where [evaluate] reads a feature's own id from, standing in for the id an
+/// MVT feature carries alongside its attributes.
+const featureIdKey = r'$id';
+
+/// A tile feature as MapLibre sees it: the tile's attributes, plus the id
+/// identity actually rides on since the tileset dropped its `OSM_ID` column.
+///
+/// Fixtures still name the way under `OSM_ID` because that is how Steward
+/// files it downstream; this is the one place it becomes a feature id, which
+/// mirrors what the map view does with a real query result.
+Map<String, Object?> tileFeature(Map<String, Object?> props) => {
+  ...props,
+  if (props['OSM_ID'] case final int wayId)
+    featureIdKey: tileFeatureIdForWay(wayId),
+};
+
 /// A style document with just enough shape for [buildStewardStyle].
 Map<String, Object?> baseStyle() => {
   'version': 8,
@@ -85,7 +103,7 @@ const _modeSelections = <Set<TravelMode>>[
 
 /// Which of the overlay's trail-line layers would draw [props].
 Set<String> layersDrawing(
-  Map<String, Object?> props, {
+  Map<String, Object?> rawProps, {
   required Set<TravelMode> modes,
   required Set<Lens> lenses,
   Set<TrailKind> kinds = const {...TrailKind.values},
@@ -107,6 +125,7 @@ Set<String> layersDrawing(
     tags: tags,
   );
   final layers = (style['layers'] as List).cast<Map<String, Object?>>();
+  final props = tileFeature(rawProps);
   return {
     for (final layer in layers)
       if (lineLayers.contains(layer['id']) &&
@@ -127,7 +146,7 @@ Iterable<Map<String, Object?>> featureSpread() sync* {
         for (final bicycle in modes) {
           for (final rating in ratings) {
             for (final informal in [null, 'yes', 'no']) {
-              yield {
+              yield tileFeature({
                 'OSM_ID': 55,
                 'highway': ?highway,
                 'access': ?access,
@@ -135,7 +154,7 @@ Iterable<Map<String, Object?>> featureSpread() sync* {
                 'bicycle': ?bicycle,
                 'mtb:scale:imba': ?rating,
                 'informal': ?informal,
-              };
+              });
             }
           }
         }
@@ -210,14 +229,120 @@ void main() {
     }
   });
 
+  group('the rating a trail is drawn in', () {
+    Object? colorOf(
+      Map<String, Object?> props, {
+      TagSource tags = const TagSource.tiles(),
+    }) => evaluate(difficultyLineColor(tags), tileFeature(props));
+
+    test('comes from the trail\'s own mtb:scale:imba', () {
+      const expected = {
+        '0': easyTrailColor,
+        '1': easyTrailColor,
+        '2': mediumTrailColor,
+        '3': hardTrailColor,
+        '4': veryHardTrailColor,
+      };
+      expected.forEach((scale, color) {
+        expect(
+          colorOf({'OSM_ID': 7, 'mtb:scale:imba': scale}),
+          color,
+          reason: 'mtb:scale:imba=$scale',
+        );
+      });
+    });
+
+    test('is purple where there is no rating, or none Steward can read', () {
+      expect(colorOf({'OSM_ID': 7}), unspecifiedColor);
+      expect(
+        colorOf({'OSM_ID': 7, 'mtb:scale:imba': 'unknown'}),
+        unspecifiedColor,
+      );
+    });
+
+    test('follows the override, so a rating recolours before the next '
+        'planet build', () {
+      final overriding = TagSource.overriding(const {
+        7: {'highway': 'path', 'mtb:scale:imba': '3'},
+      });
+      // The tile still says the trail is easy; Steward has since read it as
+      // difficult, and the line has to say so.
+      expect(
+        colorOf({'OSM_ID': 7, 'mtb:scale:imba': '1'}, tags: overriding),
+        hardTrailColor,
+      );
+      // A trail the override says nothing about keeps reading from the tile.
+      expect(
+        colorOf({'OSM_ID': 8, 'mtb:scale:imba': '1'}, tags: overriding),
+        easyTrailColor,
+      );
+    });
+
+    test('goes back to purple when an override drops the rating', () {
+      final overriding = TagSource.overriding(const {
+        7: {'highway': 'path'},
+      });
+      expect(
+        colorOf({'OSM_ID': 7, 'mtb:scale:imba': '2'}, tags: overriding),
+        unspecifiedColor,
+      );
+    });
+  });
+
+  group('the selection glow', () {
+    Map<String, Object?> trail(int wayId, {String highway = 'path'}) =>
+        tileFeature({'OSM_ID': wayId, 'highway': highway});
+
+    bool glows(
+      Map<String, Object?> feature,
+      List<int> selected, {
+      Set<TrailKind> kinds = const {...TrailKind.values},
+      TagSource tags = const TagSource.tiles(),
+    }) =>
+        evaluate(
+          selectionFilter(selected, kinds: kinds, tags: tags),
+          feature,
+        ) ==
+        true;
+
+    test('picks out exactly the ways in the working set', () {
+      // The whole point of filtering on the id rather than drawing fetched
+      // geometry: a box selection names thirty ways at once and none of them
+      // has been read from the OSM API yet.
+      const boxed = [7, 8, 9];
+      expect(glows(trail(7), boxed), isTrue);
+      expect(glows(trail(9), boxed), isTrue);
+      expect(glows(trail(10), boxed), isFalse);
+    });
+
+    test('nothing glows when nothing is selected', () {
+      expect(glows(trail(7), const []), isFalse);
+    });
+
+    test('a selected trail hidden by a kind toggle takes its glow with it', () {
+      final sidewalk = trail(7, highway: 'footway');
+      expect(glows(sidewalk, const [7]), isTrue);
+      expect(
+        glows(sidewalk, const [7], kinds: const {TrailKind.informal}),
+        isFalse,
+        reason: 'a glow with no line under it is a ghost',
+      );
+    });
+
+    test('a feature that is not a trail at all never glows', () {
+      // Same id, but the tileset also carries waterways and ferries.
+      expect(glows(tileFeature({'OSM_ID': 7}), const [7]), isFalse);
+    });
+  });
+
   group('the kind toggles', () {
-    Map<String, Object?> feature(Map<String, Object?> tags) => {
+    Map<String, Object?> feature(Map<String, Object?> tags) => tileFeature({
       'OSM_ID': 7,
       'highway': 'path',
       'bicycle': 'designated',
       'mtb:scale:imba': '2',
       ...tags,
-    };
+    });
 
     Set<String> drawnWith(Map<String, Object?> props, Set<TrailKind> kinds) =>
         layersDrawing(
@@ -290,11 +415,8 @@ void main() {
 
   // A formal trail anyone may ride, with no IMBA rating — the exact thing the
   // difficulty lens paints magenta and a steward is here to fix.
-  Map<String, Object?> unrated({int id = 100}) => {
-    'OSM_ID': id,
-    'highway': 'path',
-    'bicycle': 'designated',
-  };
+  Map<String, Object?> unrated({int id = 100}) =>
+      tileFeature({'OSM_ID': id, 'highway': 'path', 'bicycle': 'designated'});
 
   group('the difficulty lens, straight off the tiles', () {
     test('an unrated trail draws as unspecified', () {

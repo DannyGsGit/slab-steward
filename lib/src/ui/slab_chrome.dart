@@ -9,6 +9,33 @@ import 'slab_theme.dart';
 /// four panels that each drew their own heading would drift into four
 /// different products. See `docs/requirements/SLAB Design System - Mockups v2.html`.
 
+const _months = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/// A day, the way every SLAB panel writes one: `Aug 30, 2026`.
+///
+/// Always rendered in the rider's own timezone. OSM hands back timestamps in
+/// UTC, which is already tomorrow for an evening edit anywhere west of
+/// Greenwich — and it agrees with the day-bucketing behind the streak and the
+/// charts, so a changeset can't be listed under one date and counted under
+/// another.
+String formatSlabDate(DateTime date) {
+  final local = date.toLocal();
+  return '${_months[local.month - 1]} ${local.day}, ${local.year}';
+}
+
 /// The heading of a panel or dialog: the title, whatever the panel wants
 /// beside it, and the control that dismisses it.
 class PanelHeader extends StatelessWidget {

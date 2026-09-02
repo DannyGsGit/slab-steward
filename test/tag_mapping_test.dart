@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:slab_steward/src/map/otm_conventions.dart';
 import 'package:slab_steward/src/model/difficulty.dart';
 import 'package:slab_steward/src/model/electric_bicycle.dart';
 import 'package:slab_steward/src/model/surface.dart';
@@ -170,6 +171,43 @@ void main() {
       // Tags are replaced wholesale, not merged — a tag deleted in OSM must
       // not survive from the stale tile copy.
       expect(merged.surface, isNull);
+    });
+  });
+
+  // The tileset stopped publishing OSM_ID as an attribute; identity rides on
+  // the MVT feature id now, planetiler-encoded. Getting this wrong is not a
+  // cosmetic bug — every click resolves to no trail at all, and the map goes
+  // quietly unclickable.
+  group('the way id behind a tile feature', () {
+    test(
+      'decodes planetiler\'s id, which is the way id times ten plus two',
+      () {
+        // Real ids, checked against the OSM API: 1888100882 is "Movin\' On".
+        expect(osmWayIdFromTileFeature(1888100882), 188810088);
+        expect(osmWayIdFromTileFeature(63391412), 6339141);
+        expect(tileFeatureIdForWay(188810088), 1888100882);
+      },
+    );
+
+    test('round-trips', () {
+      for (final wayId in [1, 42, 6339141, 1446121923]) {
+        expect(osmWayIdFromTileFeature(tileFeatureIdForWay(wayId)), wayId);
+      }
+    });
+
+    test('reads the string form Android hands back', () {
+      expect(osmWayIdFromTileFeature('1888100882'), 188810088);
+    });
+
+    test('refuses anything that is not a way', () {
+      // Nodes and relations carry 1 and 3; Steward edits neither.
+      expect(osmWayIdFromTileFeature(1888100881), isNull);
+      expect(osmWayIdFromTileFeature(1888100883), isNull);
+      // And a feature with no usable id at all is not something to guess at.
+      expect(osmWayIdFromTileFeature(null), isNull);
+      expect(osmWayIdFromTileFeature('nonsense'), isNull);
+      expect(osmWayIdFromTileFeature(0), isNull);
+      expect(osmWayIdFromTileFeature(-42), isNull);
     });
   });
 }

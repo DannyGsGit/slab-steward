@@ -23,6 +23,13 @@ class Trail {
   });
 
   /// Built from what the vector tile carried. Provisional by definition.
+  ///
+  /// [props] is the tile's attributes with the OSM way id filed in under
+  /// `OSM_ID` — the tileset publishes identity as the MVT feature id now, so
+  /// the map view splices it back in; see `otm_conventions.dart`. The same
+  /// build dropped `OSM_VERSION` and the bounds columns, so [version] and
+  /// [tileCenter] are usually null until the OSM API answers. Both are still
+  /// read here: they cost nothing, and the columns may come back.
   factory Trail.fromTileProperties(Map<String, Object?> props) {
     final tags = <String, String>{};
     for (final entry in props.entries) {
@@ -158,10 +165,4 @@ class Trail {
     nodeIds: nodeIds,
     tileCenter: tileCenter,
   );
-
-  Map<String, Object?> toGeoJsonFeature() => {
-    'type': 'Feature',
-    'properties': {'osmWayId': osmWayId},
-    'geometry': {'type': 'LineString', 'coordinates': geometry ?? const []},
-  };
 }

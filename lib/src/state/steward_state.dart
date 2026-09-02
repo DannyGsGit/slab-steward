@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import '../analytics/steward_events.dart';
 import '../model/difficulty.dart';
 import '../model/ebike_class.dart';
 import '../model/electric_bicycle.dart';
@@ -130,6 +131,12 @@ class StewardState extends ChangeNotifier {
   StewardStats? _stats;
   bool _isLoadingStats = false;
   String? _statsError;
+
+  /// The changesets [_stats] was summed from, newest first, kept rather than
+  /// discarded because the account pane lists them one by one — the summary
+  /// answers "how much", and only the records themselves can answer "which,
+  /// and where do I go to see it".
+  List<OsmChangeset> _changesets = const [];
 
   /// The open sidebar pane, or null when the rail is collapsed to the map.
   SidebarSection? _activeSection = SidebarSection.map;
@@ -267,6 +274,7 @@ class StewardState extends ChangeNotifier {
     // front — the sidebar is where the panel that used to float over the map
     // now lives.
     _showSelectionPane();
+    trackTrailSelected(bulk: false, count: 1);
     notifyListeners();
 
     await ensureAuthoritative(trail.osmWayId);
@@ -294,6 +302,9 @@ class StewardState extends ChangeNotifier {
     if (selected) {
       if (!_trails.containsKey(osmWayId)) return;
       _selection.add(osmWayId);
+      // Not also emitted from toggleFromTile, which delegates here — a
+      // ctrl-click would otherwise count twice.
+      trackTrailSelected(bulk: false, count: 1);
       notifyListeners();
       await ensureAuthoritative(osmWayId);
       return;
@@ -324,6 +335,7 @@ class StewardState extends ChangeNotifier {
     }
     if (!added) return;
     _showSelectionPane();
+    trackTrailSelected(bulk: true, count: _selection.length);
     notifyListeners();
   }
 
@@ -343,6 +355,9 @@ class StewardState extends ChangeNotifier {
     _selection
       ..clear()
       ..addAll(next);
+    // "Select none" is a clear, not a selection, and shouldn't land in the
+    // funnel as one.
+    if (next.isNotEmpty) trackTrailSelected(bulk: true, count: next.length);
     notifyListeners();
   }
 
@@ -410,6 +425,10 @@ class StewardState extends ChangeNotifier {
   bool get isLoadingStats => _isLoadingStats;
   String? get statsError => _statsError;
 
+  /// The rider's Steward changesets, newest first — empty until [loadStats]
+  /// has been through at least once.
+  List<OsmChangeset> get changesets => UnmodifiableListView(_changesets);
+
   /// Fetches the rider's Steward changesets and summarises them, unless a
   /// load is already in flight. Requires a signed-in rider — the stats pane
   /// checks [OsmAuthState.isSignedIn] before ever calling this.
@@ -428,6 +447,11 @@ class StewardState extends ChangeNotifier {
         bearerToken: token,
       );
       _stats = StewardStats.from(changesets);
+      // Newest first, which is the order the account pane's list wants and
+      // the order OSM happens to answer in — sorted here anyway, because the
+      // list must not depend on that.
+      _changesets = changesets.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     } on OsmApiException catch (e) {
       _statsError = e.message;
     } finally {
@@ -439,9 +463,10 @@ class StewardState extends ChangeNotifier {
   /// Drops whatever stats were loaded — called on sign-out, so a pane left
   /// open doesn't keep showing the last rider's numbers under a new name.
   void clearStats() {
-    if (_stats == null && _statsError == null) return;
+    if (_stats == null && _statsError == null && _changesets.isEmpty) return;
     _stats = null;
     _statsError = null;
+    _changesets = const [];
     notifyListeners();
   }
 
@@ -727,6 +752,14 @@ class StewardState extends ChangeNotifier {
       touched = true;
     }
 
+    if (staged > 0) {
+      // The one emit point for staging. Every path — a single picker via
+      // _stageOnTrail, or a bulk apply over a hundred trails — arrives here,
+      // so one event per *act* is what the funnel sees, carrying how many
+      // trails that act covered. Walking an edit back stages nothing and is
+      // deliberately not an event.
+      trackEditStaged(attribute: attribute, trailCount: staged);
+    }
     if (touched) {
       _stagedRevision++;
       notifyListeners();

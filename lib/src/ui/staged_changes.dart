@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../model/staged_edit.dart';
 import '../osm/oauth_popup.dart' show OAuthPopupCancelled;
 import '../osm/osm_environment.dart';
+import '../analytics/steward_events.dart';
 import '../osm/submission_gate.dart';
 import '../state/steward_state.dart';
 import 'slab_chrome.dart';
@@ -50,6 +51,7 @@ class _StagedChangesPanelState extends State<StagedChangesPanel> {
   Future<void> _submit() async {
     final comment = _comment.text.trim();
     if (comment.isEmpty) return;
+    trackSubmitOpened(trailCount: widget.state.stagedTrails.length);
     await showDialog<void>(
       context: context,
       builder: (_) => SubmissionGateDialog(
@@ -115,53 +117,87 @@ class _StagedChangesPanelState extends State<StagedChangesPanel> {
       );
     }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _SubmitSection(
-          comment: _comment,
-          requestReview: _requestReview,
-          onRequestReviewChanged: (value) =>
-              setState(() => _requestReview = value),
-          onSubmit: _submit,
-          onSignIn: _signIn,
-          authError: _authError,
+    final submit = _SubmitSection(
+      comment: _comment,
+      requestReview: _requestReview,
+      onRequestReviewChanged: (value) => setState(() => _requestReview = value),
+      onSubmit: _submit,
+      onSignIn: _signIn,
+      authError: _authError,
+      state: widget.state,
+    );
+    final groups = [
+      for (final entry in byTrail.entries)
+        _TrailGroup(
+          osmWayId: entry.key,
+          edits: entry.value,
           state: widget.state,
         ),
-        const Divider(height: 1),
-        Flexible(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
+    ];
+    final discardAll = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+          label: const Text('Discard all'),
+          style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
+          onPressed: _discardAll,
+        ),
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Pinning the comment and the Submit button above a scrolling list is
+        // the right shape while there is room for both: a rider pruning a long
+        // list can still see what they are about to send. Below that — a phone's
+        // band above the bottom bar, or a short window — the form alone is
+        // taller than the pane, and pinning it would push the list off the
+        // bottom edge. There, everything scrolls together.
+        if (constraints.maxHeight < _pinnedFormNeeds) {
+          return ListView(
             children: [
-              for (final entry in byTrail.entries)
-                _TrailGroup(
-                  osmWayId: entry.key,
-                  edits: entry.value,
-                  state: widget.state,
+              submit,
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: groups,
                 ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              icon: const Icon(Icons.delete_sweep_outlined, size: 18),
-              label: const Text('Discard all'),
-              style: TextButton.styleFrom(
-                foregroundColor: theme.colorScheme.error,
               ),
-              onPressed: _discardAll,
+              const Divider(height: 1),
+              discardAll,
+            ],
+          );
+        }
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            submit,
+            const Divider(height: 1),
+            Flexible(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
+                children: groups,
+              ),
             ),
-          ),
-        ),
-      ],
+            const Divider(height: 1),
+            discardAll,
+          ],
+        );
+      },
     );
   }
 }
+
+/// How much height the pinned comment form wants before it stops being worth
+/// pinning: the field and its helper text, the review checkbox, the submit
+/// button, and enough of the list under them to be a list.
+const _pinnedFormNeeds = 420.0;
 
 /// The pre-flight checks, and — if they all pass — the submission itself.
 ///
@@ -219,6 +255,15 @@ class _SubmissionGateDialogState extends State<SubmissionGateDialog> {
       trails: widget.state.stagedTrails,
     );
     if (!mounted) return;
+    if (!passed) {
+      // Which step stopped it, not merely that something did. A retry emits
+      // again on purpose: a rider who fails the comment check three times is
+      // a different story from one who fails it once.
+      final failed = _gate.checks
+          .where((c) => c.status == CheckStatus.failed)
+          .firstOrNull;
+      if (failed != null) trackGateFailed(check: failed.id);
+    }
     if (passed) await _submit();
   }
 
@@ -234,6 +279,7 @@ class _SubmissionGateDialogState extends State<SubmissionGateDialog> {
     final token = widget.state.auth.bearerToken;
     if (token == null) return;
     final count = widget.state.stagedEditCount;
+    final trailCount = widget.state.stagedTrails.length;
     final ok = await _gate.submit(
       bearerToken: token,
       requestReview: widget.requestReview,
@@ -243,6 +289,11 @@ class _SubmissionGateDialogState extends State<SubmissionGateDialog> {
       // Folds what just went out into the override cache before emptying the
       // staging area, so the trail keeps rendering as edited instead of
       // reverting to whatever the tileset last knew.
+      // Counted before applySubmitted empties staging.
+      trackSubmitSucceeded(
+        trailCount: trailCount,
+        changesetId: _gate.changesetId,
+      );
       widget.state.applySubmitted();
       // Stays open on purpose — the rider closes it once they've read the
       // result, rather than it vanishing the moment the last check passes.

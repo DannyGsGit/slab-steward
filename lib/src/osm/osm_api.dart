@@ -138,25 +138,70 @@ class OsmApi {
   ///
   /// Closed only — a changeset left open by a failed upload isn't finished
   /// work, and shouldn't inflate a count the rider reads as an achievement.
-  /// One page: OSM caps this endpoint at 100 changesets per call, which is
-  /// far more than the summary this feeds needs.
+  ///
+  /// **The hashtag is matched here, not by the server.** `changesets.json`
+  /// accepts a `hashtag` parameter and *silently ignores* it — no error, just
+  /// unfiltered results — so sending one bought nothing and the pane spent a
+  /// while showing riders their entire OSM history under a heading about
+  /// Steward. Verified August 2026: the same query with and without
+  /// `hashtag=zzznonexistentzzz` returns identical changesets. See
+  /// docs/specs/analytics.md §5.
+  ///
+  /// The consequence is a limitation worth knowing about: OSM caps this
+  /// endpoint at 100 changesets per call, and that page is now a *pre-filter*
+  /// rather than the answer. A rider prolific enough to have made 100
+  /// changesets since their last Steward edit would see an empty pane. Paging
+  /// backwards until the hashtag runs out would fix it, at the cost of an
+  /// unbounded number of calls to a courtesy-limited API for a summary panel;
+  /// not worth it until someone actually hits it.
   Future<List<OsmChangeset>> fetchChangesets({
     required int userId,
     required String hashtag,
     required String bearerToken,
   }) async {
-    final uri = Uri.parse('$baseUrl/api/0.6/changesets.json').replace(
-      queryParameters: {
-        'user': '$userId',
-        'hashtag': hashtag,
-        'closed': 'true',
-      },
-    );
+    final uri = Uri.parse(
+      '$baseUrl/api/0.6/changesets.json',
+    ).replace(queryParameters: {'user': '$userId', 'closed': 'true'});
     final response = await _authorized(bearerToken).get(uri);
     _checkOk(response, action: 'reading your changesets');
     final body = jsonDecode(response.body) as Map<String, Object?>;
     final elements = (body['changesets'] as List).cast<Map<String, Object?>>();
-    return [for (final e in elements) OsmChangeset.fromJson(e)];
+    return [
+      for (final e in elements)
+        if (_carriesHashtag(e, hashtag)) OsmChangeset.fromJson(e),
+    ];
+  }
+
+  /// Whether one changeset from `changesets.json` carries [hashtag].
+  ///
+  /// Checks the `hashtags` tag *and* the comment, because OSM treats both as
+  /// sources: a changeset with no `hashtags` tag still counts as tagged if the
+  /// comment contains `#thing`, which is exactly what
+  /// `SubmissionGate.ensureHashtag` guarantees. Semicolons separate multiple
+  /// hashtags; comparison ignores case and a leading `#`.
+  static bool _carriesHashtag(Map<String, Object?> changeset, String hashtag) {
+    final tags = changeset['tags'];
+    if (tags is! Map) return false;
+    final wanted = hashtag.toLowerCase().replaceFirst(RegExp('^#'), '');
+
+    final tagged = tags['hashtags'];
+    if (tagged is String) {
+      for (final entry in tagged.split(';')) {
+        if (entry.trim().toLowerCase().replaceFirst(RegExp('^#'), '') ==
+            wanted) {
+          return true;
+        }
+      }
+    }
+
+    final comment = tags['comment'];
+    if (comment is String) {
+      return RegExp(
+        '#${RegExp.escape(wanted)}\\b',
+        caseSensitive: false,
+      ).hasMatch(comment);
+    }
+    return false;
   }
 
   http.Client _authorized(String bearerToken) =>
@@ -225,8 +270,9 @@ class OsmWay {
   final List<int> nodeIds;
 }
 
-/// One changeset from `/api/0.6/changesets.json` — just the fields the stats
-/// pane sums over, not the full changeset representation.
+/// One changeset from `/api/0.6/changesets.json` — the fields the stats pane
+/// sums over and the account pane lists, not the full changeset
+/// representation.
 class OsmChangeset {
   const OsmChangeset({
     required this.id,
@@ -242,6 +288,11 @@ class OsmChangeset {
   final int changesCount;
 
   final String? comment;
+
+  /// The human-facing permalink — where "view on OpenStreetMap" goes. Built
+  /// from [osmWebHost], not the API host: `/changeset/{id}` is served by the
+  /// website, and the two are different machines.
+  String get osmUrl => '$osmWebHost/changeset/$id';
 
   factory OsmChangeset.fromJson(Map<String, Object?> json) {
     final tags = (json['tags'] as Map<String, Object?>?) ?? const {};

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../analytics/analytics.dart';
+import '../analytics/steward_events.dart';
 import 'oauth_popup.dart';
 import 'oauth_storage.dart';
 import 'osm_api.dart';
@@ -56,6 +58,10 @@ class OsmAuthState extends ChangeNotifier {
     _identity = OsmIdentity.fromJson(
       jsonDecode(identityJson) as Map<String, Object?>,
     );
+    // A restored session is still this rider. Without this, everyone who
+    // signed in on a previous visit would come back anonymous and read as a
+    // new person every time.
+    identifyRider('${_identity!.id}');
     notifyListeners();
   }
 
@@ -73,6 +79,7 @@ class OsmAuthState extends ChangeNotifier {
     }
     _isSigningIn = true;
     notifyListeners();
+    trackAuthStarted();
     try {
       final verifier = generateCodeVerifier();
       final challenge = codeChallengeFor(verifier);
@@ -126,6 +133,19 @@ class OsmAuthState extends ChangeNotifier {
       _identity = identity;
       writeStorage(_tokenKey, token);
       writeStorage(_identityKey, jsonEncode(identity.toJson()));
+      trackAuthCompleted();
+      // The numeric id, not the display name: stable across renames, and
+      // already public on every changeset the rider has ever made.
+      identifyRider('${identity.id}');
+    } on OAuthPopupCancelled {
+      trackAuthCancelled();
+      rethrow;
+    } catch (e) {
+      // The type name only. A message from the token exchange can carry
+      // fragments of an OAuth response, which has no business in an
+      // analytics payload.
+      trackAuthFailed(e.runtimeType.toString());
+      rethrow;
     } finally {
       _isSigningIn = false;
       notifyListeners();
@@ -169,6 +189,9 @@ class OsmAuthState extends ChangeNotifier {
     _identity = null;
     removeStorage(_tokenKey);
     removeStorage(_identityKey);
+    // So a second rider on a shared browser starts a new person instead of
+    // being merged into the first.
+    resetAnalytics();
     notifyListeners();
   }
 

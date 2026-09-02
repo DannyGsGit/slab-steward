@@ -1,7 +1,9 @@
-/// Which trails are drawn, and what questions the colouring answers.
+/// Which trails are drawn, and what questions the highlighting answers.
 ///
 /// Both concepts come straight from OpenTrailMap: a travel mode decides what is
-/// shown, a lens decides how it is coloured. Steward ships a narrow slice of
+/// shown, a lens decides what is picked out. Colour itself is spoken for —
+/// every line wears its IMBA rating, so a lens says its piece with a golden
+/// glow instead. See `docs/specs/map_view.md`. Steward ships a narrow slice of
 /// each — the modes a mountain biker cares about, and the lenses that map onto
 /// the fields the guided editor can actually write.
 library;
@@ -37,7 +39,7 @@ enum TravelMode {
 /// a single fixed "Missing any" lens — selecting the attribute lenses
 /// together is exactly it — and selecting none of them is the plain map.
 enum Lens {
-  /// Purple where OSM doesn't say whether the chosen travel modes are
+  /// Glows gold where OSM doesn't say whether the chosen travel modes are
   /// allowed. Meaningless with no mode chosen, so the UI hides it then.
   access('Unknown access', 'access', []),
 
@@ -82,9 +84,4 @@ extension LensSelection on Iterable<Lens> {
     for (final lens in Lens.values)
       if (contains(lens)) lens,
   ];
-
-  /// Whether passing every selected lens recolours the trail teal. Attribute
-  /// lenses say "this one is done"; [Lens.access] on its own leaves passing
-  /// trails in plain brown, the way OpenTrailMap does.
-  bool get tintsSpecified => any((lens) => lens.keys.isNotEmpty);
 }

@@ -9,9 +9,10 @@ Full scope in [docs/requirements/SLAB_Steward_Product_Description_v1.md](docs/re
 
 ## Status
 
-Flutter app, **web only** for now — mobile is deliberately deferred, so
-`flutter create` was run with `--platforms=web` and the other platform folders
-don't exist yet. Adding them later is `flutter create --platforms=ios,android .`;
+Flutter app, **web only** for now — native iOS and Android are deliberately
+deferred, so `flutter create` was run with `--platforms=web` and the other
+platform folders don't exist yet. A phone-shaped *browser* window is handled
+here, by layout: see the bottom bar below. Adding them later is `flutter create --platforms=ios,android .`;
 nothing in `lib/` is web-specific.
 
 What works today:
@@ -22,6 +23,15 @@ What works today:
   pane, one open at a time, and the rail collapses them to give the map the
   whole window. The map is never underneath the chrome, which is also what
   keeps a click or a scroll in a pane from reaching it
+- **On a window narrower than 720 the same layout turns ninety degrees**: a
+  bottom bar carries Trails, Selection, Staged and Account, and the open pane
+  becomes a band between the map and the bar. A rail plus a pane is two
+  vertical strips, and on a phone that leaves the pane too narrow to read a
+  trail name in. Three things move, all of them about width — the brand mark
+  goes, labels shorten, and the Map pane leaves the bar for a button in the
+  map's own top-right corner, next to the thing it changes. The panes
+  themselves are the same panes. See
+  [bottom_bar.dart](lib/src/ui/bottom_bar.dart)
 - Trail display controls with some grain to them: which travel modes the trails
   have to be open to (multi-select), which *kinds* of line are worth drawing —
   informal trails, tracks and fire roads, footways and sidewalks, paved
@@ -83,6 +93,15 @@ the review sheet lists, explains and prunes each one on its own.
   closes it, and links the result. **This build is a dry run — it does
   everything but send the changeset** — see "OSM API environment" below before
   changing that
+- The Account pane is the whole record of that account, in the order a rider
+  asks for it: who they are, what they have done through Steward — changesets,
+  trails touched, day streak, days active, an activity chart and a
+  contribution heatmap, all scoped to Steward's own `#slabsteward` changesets
+  rather than a decade of unrelated OSM history — then the submitted
+  changesets themselves, each a link out to OSM's own page for it, and the
+  sign-out last. Stats had a rail button of their own until it became clear
+  both halves came back from one read of the same changesets, which made the
+  second button a second door onto the same room
 
 Not built yet: surface and sanction editing, Commons, the keyring. Lasso
 selection is deliberately deferred (product description §4).
@@ -320,7 +339,10 @@ are load-bearing:
 
 - The sidebar is laid out **beside** the map — a `Row`, not a `Stack` — so most
   of the chrome never overlaps it at all. See
-  [sidebar.dart](lib/src/ui/sidebar.dart).
+  [sidebar.dart](lib/src/ui/sidebar.dart). The narrow layout makes the same
+  trade turned ninety degrees: the pane and the bar are a band *under* the map
+  rather than a sheet over it, and the map settings button is the only piece
+  that floats.
 - Whatever still overlaps — the sidebar's own footprint, the submission dialog,
   the zoom buttons — is wrapped in a `PointerInterceptor`, which puts a real DOM
   element in front of the map to stop those events at the browser.
@@ -376,7 +398,7 @@ Everything is fetched directly from the browser; there is no backend yet.
 | What | Where | Notes |
 |---|---|---|
 | Basemap style | `opentrailmap.us/style.json` | OpenTrailMap's published MapLibre stylesheet |
-| Trail geometry & tags | `tiles.openstreetmap.us/vector/trails.json` | OSM US's trails tileset. Carries `mtb:scale:imba`, `surface`, `informal`, `OSM_ID`, `OSM_VERSION` — the whole discovery surface, no Overpass needed |
+| Trail geometry & tags | `tiles.openstreetmap.us/vector/trails.json` | OSM US's trails tileset. Carries `mtb:scale:imba`, `surface`, `informal` and the rest of the tags the lenses read — the whole discovery surface, no Overpass needed. Identity is the MVT feature id (planetiler's `osmId * 10 + type`), not an attribute: the 2026-08-17 build dropped the `OSM_ID`, `OSM_VERSION` and bounds columns, so `osmWayIdFromTileFeature` decodes it and the map view files it back under `OSM_ID` for everything downstream |
 | Authoritative tags & geometry | `api.openstreetmap.org/api/0.6/way/{id}/full.json` | Fetched on selection. Tiles lag OSM by days, and a changeset built on a stale version clobbers someone else's edit. What comes back also feeds [TrailOverrides](lib/src/model/trail_overrides.dart) — see "Trails the tiles are wrong about" |
 | Sign-in, changeset writes | `www.openstreetmap.org/oauth2/*`, `api.openstreetmap.org/api/0.6/changeset/*` | Under the rider's own OAuth token. The changeset calls are the one thing `osmEnvironment = dryRun` skips — see "OSM API environment" |
 
@@ -400,34 +422,65 @@ filter composition, from `js/styleGenerator.js`).
 |---|---|
 | Solid line | Official trail |
 | Dashed line | `informal=yes` |
-| Pale tan + no-entry symbols | The selected travel mode isn't allowed here |
-| Teal `#007f79` | Every selected lens' attribute is present |
-| Purple `#c100cc` | One of them is missing — what a steward is here to fix |
+| Faded line + no-entry symbols | The selected travel mode isn't allowed here |
+| Line colour | The trail's IMBA rating — see below |
+| Golden glow `#ffd400` | Matches the ticked Highlight rules: what a steward is here to fix |
+| Teal glow `#00d1c1` | In the working set |
+| Glow in its rating's colour | An edit is staged on this trail |
 
-Three deliberate departures, each commented at its call site:
+Colour is spent on difficulty and nothing else, per
+[docs/specs/map_view.md](docs/specs/map_view.md), so the line under the wheel
+and the chip on the trailhead sign agree. The five tiers are SLAB's own
+signage colours, read off `assets/slab/difficulty/*.svg`:
 
-1. **Disallowed trails stay visible** when a travel mode is picked, rendered
-   pale rather than hidden. OpenTrailMap hides them; a steward still has to be
-   able to click a trail in order to fix its tags, and a hidden trail can't be
-   clicked.
+| `mtb:scale:imba` | Colour | |
+|---|---|---|
+| absent | Purple `#c100cc` | un-rated — OSM doesn't know |
+| `0`, `1` | Green `#2f6b4d` | beginner and easy |
+| `2` | Blue `#3b5fc6` | medium |
+| `3` | Black `#16191c` | difficult |
+| `4` | Red `#ef4b18` | expert and Pro Line |
+
+Beginner rides with Easy rather than taking the purple its own signage chip
+wears: purple is spoken for on the map, and IMBA 0 and 1 are the same green
+tier on a trailhead board anyway. `4` is red rather than a second black
+because "very hard" has to be tellable from "hard" at a glance.
+
+Everything Steward has to say about a trail beyond its rating is said with a
+glow, stacked bottom to top in the order a steward reads them: what the rules
+found, what has an edit waiting on it, what is in hand.
+
+Four deliberate departures, each commented at its call site:
+
+1. **Disallowed trails stay visible** when a travel mode is picked, faded
+   rather than hidden — and still in their rating's colour, because "you
+   can't ride here" is worth an opacity, not a second hue. OpenTrailMap hides
+   them; a steward still has to be able to click a trail in order to fix its
+   tags, and a hidden trail can't be clicked.
 2. **Lenses stack, all-of.** OpenTrailMap's attribute lenses each ask about
    one key, one at a time. Steward's highlight picker is a multi-select: a
-   trail is teal only when it answers *every* ticked lens, so ticking
-   difficulty, surface and e-bike access together is the completeness
+   trail stops glowing gold only when it answers *every* ticked lens, so
+   ticking difficulty, surface and e-bike access together is the completeness
    indicator the product description §2 describes.
-3. **Selection is drawn from its own GeoJSON source**, not as a feature-state
-   highlight. The Flutter MapLibre binding has no `setFeatureState`.
+3. **Selection is a filter on the tileset**, not a feature-state highlight —
+   the Flutter binding has no `setFeatureState`, so the glow layer is filtered
+   by feature id and re-added whenever the working set changes. That is what
+   lets a cmd-drag over thirty trails light all thirty at once: none of them
+   has been read from the OSM API yet, and a bulk selection deliberately reads
+   nothing until there is an edit to compose. The staged glow still draws from
+   its own GeoJSON source, because a staged trail keeps its glow after the
+   rider clicks away and always has geometry by then.
 4. **The filters can read from somewhere other than the tile** — see below.
 
 Waterways and oneway arrows are dropped — v1 edits neither.
 
 ### Trails the tiles are wrong about
 
-The lens colours are decided by MapLibre expressions over vector tile
-properties, and that tileset is a periodic planet build — its TileJSON
+The line colours and the glows are decided by MapLibre expressions over vector
+tile properties, and that tileset is a periodic planet build — its TileJSON
 routinely reports a timestamp several days old. Left alone, this means a trail
-you just rated keeps drawing as unrated, and the moment the changeset closes it
-also loses its blue staged glow: the work looks undone exactly when it lands.
+you just rated keeps drawing purple, and the moment the changeset closes it
+also loses its staged glow: the work looks undone exactly when it lands.
 Trails somebody *else* has already fixed keep being advertised as work, too.
 
 [TrailOverrides](lib/src/model/trail_overrides.dart) is the reconciliation. It
@@ -480,10 +533,11 @@ from [slab_theme.dart](lib/src/ui/slab_theme.dart).
 | Cream / Sage / Sage-dim | `#F3EFE6` / `#93A69A` / `#5C6E62` | primary, secondary and tertiary text |
 | Rust | `#B5453A` | errors, and discarding staged work |
 
-Two colours stay tied to the map rather than the palette: the MISSING badge is
-the purple the map draws an unspecified trail in, and STAGED is the blue it
-glows a trail with once something is pending on it — both lifted a few stops so
-they hold up as small text on dark. Difficulty is never a colour swatch here:
+One colour stays tied to the map rather than the palette: the MISSING badge is
+the purple the map draws an un-rated or unanswered trail in, lifted a few stops
+so it holds up as small text on dark. STAGED is blue and borrows nothing — the
+staged glow is the rating the edit will leave behind, so there is no one colour
+for a badge to echo. Difficulty is never a colour swatch here:
 it is SLAB's own signage chip, loaded straight from
 `assets/slab/difficulty/*.svg` so both apps put the same glyph in front of a
 rider.
@@ -531,14 +585,20 @@ lib/
       slab_theme.dart        SLAB palette tokens and the app-wide ThemeData
       slab_chrome.dart       panel headings, surfaces, tags
       fields.dart            labelled rows, status badges, guided pickers
-      sidebar.dart           the rail and the one pane beside the map
+      sidebar.dart           the rail, and the pane both layouts share
+      bottom_bar.dart        the narrow-window bar, its pane, and the map
+                             settings button that floats over the map
       map_controls.dart      modes, trail kinds, lenses, and the legend
       legend.dart            what the colours mean
       trail_panel.dart       one selected trail, and its guided editor
       selection_panel.dart   several selected trails, and the bulk editor
       trail_list_panel.dart  every trail in the viewport, as a working list
       staged_changes.dart    the staging pane and the submission gate dialog
-      account_panel.dart     OSM sign-in / who you're writing as
+      account_panel.dart     OSM sign-in, your stats, your submitted
+                             changesets, and the way out
+      stats_panel.dart       the stats section inside the account pane
+      activity_chart.dart    edits over time
+      contribution_heatmap.dart  a year of days, as a grid
     steward_app.dart
 assets/
   slab/
