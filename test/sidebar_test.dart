@@ -29,6 +29,7 @@ const _wayJson =
 Future<StewardState> pumpSidebar(
   WidgetTester tester, {
   StewardState? state,
+  VoidCallback? onHome,
 }) async {
   tester.view.physicalSize = const Size(1400, 1000);
   tester.view.devicePixelRatio = 1;
@@ -51,8 +52,11 @@ Future<StewardState> pumpSidebar(
           children: [
             ListenableBuilder(
               listenable: s,
-              builder: (context, _) =>
-                  StewardSidebar(state: s, maxPaneWidth: 700),
+              builder: (context, _) => StewardSidebar(
+                state: s,
+                maxPaneWidth: 700,
+                onHome: onHome ?? () {},
+              ),
             ),
             // Stands in for the map: the sidebar's whole job is to sit beside
             // it rather than on top of it.
@@ -67,6 +71,37 @@ Future<StewardState> pumpSidebar(
 }
 
 void main() {
+  testWidgets('the brand mark is the way back to the home page', (
+    tester,
+  ) async {
+    var home = 0;
+    await pumpSidebar(tester, onHome: () => home++);
+
+    // The mark sits above every rail button — it is the head of the rail, not
+    // one of its panes.
+    final mark = find.image(const AssetImage('assets/slab/logo.png'));
+    expect(mark, findsOneWidget);
+
+    await tester.tap(mark);
+    await tester.pumpAndSettle();
+    expect(home, 1, reason: 'pressing the mark leaves the editor');
+  });
+
+  testWidgets('going home does not open a pane or disturb the work', (
+    tester,
+  ) async {
+    final state = await pumpSidebar(tester);
+    state.openSection(SidebarSection.staged);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.image(const AssetImage('assets/slab/logo.png')));
+    await tester.pumpAndSettle();
+
+    // The mark navigates; it is not a sixth pane button. Whatever was open
+    // stays open, so a rider who comes back finds the editor as they left it.
+    expect(state.activeSection, SidebarSection.staged);
+  });
+
   testWidgets('opens on the map pane, and the rail collapses it', (
     tester,
   ) async {
@@ -244,8 +279,11 @@ void main() {
             children: [
               ListenableBuilder(
                 listenable: state,
-                builder: (context, _) =>
-                    StewardSidebar(state: state, maxPaneWidth: 300),
+                builder: (context, _) => StewardSidebar(
+                  state: state,
+                  maxPaneWidth: 300,
+                  onHome: () {},
+                ),
               ),
               const Expanded(child: ColoredBox(color: Color(0xFFEDE7D8))),
             ],
@@ -282,8 +320,11 @@ void main() {
             children: [
               ListenableBuilder(
                 listenable: state,
-                builder: (context, _) =>
-                    StewardSidebar(state: state, maxPaneWidth: 300),
+                builder: (context, _) => StewardSidebar(
+                  state: state,
+                  maxPaneWidth: 300,
+                  onHome: () {},
+                ),
               ),
               const Expanded(child: ColoredBox(color: Color(0xFFEDE7D8))),
             ],

@@ -36,9 +36,14 @@ class StewardSidebar extends StatelessWidget {
     super.key,
     required this.state,
     required this.maxPaneWidth,
+    required this.onHome,
   });
 
   final StewardState state;
+
+  /// What the brand mark at the head of the rail does: back to the landing
+  /// page. See [_Rail].
+  final VoidCallback onHome;
 
   /// How much of the window the pane may take. The map is the point of the
   /// app; on a narrow window the pane gives way rather than squeezing it to a
@@ -60,7 +65,7 @@ class StewardSidebar extends StatelessWidget {
     return PointerInterceptor(
       child: Row(
         children: [
-          _Rail(state: state),
+          _Rail(state: state, onHome: onHome),
           if (active != null)
             _Pane(state: state, section: active, maxWidth: maxPaneWidth),
         ],
@@ -71,9 +76,11 @@ class StewardSidebar extends StatelessWidget {
 
 /// The icon rail: the brand, one button per pane, and the account at the foot.
 class _Rail extends StatelessWidget {
-  const _Rail({required this.state});
+  const _Rail({required this.state, required this.onHome});
 
   final StewardState state;
+
+  final VoidCallback onHome;
 
   /// The design doc's `.rail`.
   static const width = 64.0;
@@ -91,15 +98,30 @@ class _Rail extends StatelessWidget {
         child: Column(
           children: [
             const SizedBox(height: 14),
+            // The mark is the way home, which is the convention every web
+            // app already taught this rider. It is *not* a pane button: it
+            // leaves the editor rather than opening something beside it, so
+            // it stays visually apart from the rail's buttons — no gold
+            // active state, no badge — and the tooltip says where it goes,
+            // because a logo that navigates and one that doesn't look
+            // identical until you press it.
+            //
+            // Staged edits and the sign-in survive the trip: both live on
+            // [StewardState], which outlives both screens.
             Tooltip(
-              message: 'SLAB Steward',
-              child: ClipRRect(
+              message: 'SLAB Steward — back to the home page',
+              child: Material(
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
-                child: Image.asset(
-                  'assets/slab/logo.png',
-                  width: 34,
-                  height: 34,
-                  filterQuality: FilterQuality.medium,
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: onHome,
+                  child: Image.asset(
+                    'assets/slab/logo.png',
+                    width: 34,
+                    height: 34,
+                    filterQuality: FilterQuality.medium,
+                  ),
                 ),
               ),
             ),

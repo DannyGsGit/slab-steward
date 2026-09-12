@@ -24,12 +24,13 @@ const _wayJson =
     '{"type":"way","id":42,"version":7,"nodes":[1,2],'
     '"tags":{"name":"Gravy Train","highway":"path"}}]}';
 
-/// The phone layout, stood up the way `_HomePage` builds it: the map (stood in
-/// for here), the settings button over its top-right corner, the open pane,
-/// and the bar.
+/// The phone layout, stood up the way [StewardMapScreen] builds it: the map
+/// (stood in for here), the brand mark over its top-left corner and the
+/// settings button over its top-right, the open pane, and the bar.
 Future<StewardState> _pumpPhone(
   WidgetTester tester, {
   StewardState? state,
+  VoidCallback? onHome,
   Size size = const Size(390, 780),
 }) async {
   tester.view.physicalSize = size;
@@ -59,6 +60,7 @@ Future<StewardState> _pumpPhone(
                   children: [
                     // Stands in for the map.
                     const ColoredBox(key: Key('map'), color: Color(0xFFEDE7D8)),
+                    MapHomeButton(onHome: onHome ?? () {}),
                     MapSettingsButton(state: s),
                   ],
                 ),
@@ -81,6 +83,34 @@ Future<StewardState> _pumpPhone(
 }
 
 void main() {
+  testWidgets('the brand mark takes the map back to the home page', (
+    tester,
+  ) async {
+    var home = 0;
+    await _pumpPhone(tester, onHome: () => home++);
+
+    // A bar has no room for something that isn't a pane, so the mark moves
+    // onto the map — to the opposite corner from the settings button, which
+    // is the other thing floating there.
+    final mark = find.byType(MapHomeButton);
+    expect(mark, findsOneWidget);
+    // Measured on the button itself rather than on the widget, which is a
+    // full-width Align and would put every corner at the middle.
+    Offset buttonCentre(Finder corner) => tester.getCenter(
+      find.descendant(of: corner, matching: find.byType(Tooltip)),
+    );
+    expect(
+      buttonCentre(mark).dx,
+      lessThan(buttonCentre(find.byType(MapSettingsButton)).dx),
+      reason: 'the two floating controls take a corner each',
+    );
+
+    // The button, not the full-width Align around it.
+    await tester.tap(find.descendant(of: mark, matching: find.byType(InkWell)));
+    await tester.pumpAndSettle();
+    expect(home, 1);
+  });
+
   testWidgets('the bar carries the work, and the map keeps its own settings', (
     tester,
   ) async {
@@ -107,9 +137,16 @@ void main() {
       reason: 'the Map pane is reached from the map, not from the bar',
     );
 
-    // The brand mark is the one thing on the rail that isn't a control, and
-    // the bar has no width to spend on it.
-    expect(find.byType(Image), findsNothing);
+    // The brand mark is the one thing on the rail that isn't a pane, and the
+    // bar has no width to spend on it. It is not gone — it moved onto the
+    // map, where it is the way home; see MapHomeButton.
+    expect(
+      find.descendant(
+        of: find.byType(StewardBottomBar),
+        matching: find.byType(Image),
+      ),
+      findsNothing,
+    );
 
     await tester.tap(find.byTooltip(SidebarSection.map.tooltip));
     await tester.pumpAndSettle();

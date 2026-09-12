@@ -17,6 +17,17 @@ nothing in `lib/` is web-specific.
 
 What works today:
 
+- **A landing page, which is now what the app opens on.** Steward writes to a
+  public database under the rider's own name, and the account requirement, the
+  verifiability standard and what a changeset actually is all have to be
+  answerable *before* the first edit — a pane inside the editor is too late to
+  ask them. Shaped after onX's own landing page (hero photograph, then a column
+  of sections that each make one claim) and painted in the SLAB palette:
+  summary, the signage scale, what tags actually get written, an expandable
+  seven-step **Getting started**, and a footer carrying the licence, the ODbL
+  attribution and the privacy statement. Two named routes, `/` and `/map`, so
+  the browser's own Back button works; the brand mark at the head of the rail
+  is the way back. See [home_page.dart](lib/src/ui/home_page.dart)
 - Map of OSM trails, styled to OpenTrailMap's conventions (see below)
 - A rail and one pane beside the map, the way SLAB's own web layout works —
   map controls, the trail list, the editor, staging and the account are each a
@@ -599,16 +610,25 @@ lib/
       stats_panel.dart       the stats section inside the account pane
       activity_chart.dart    edits over time
       contribution_heatmap.dart  a year of days, as a grid
-    steward_app.dart
+      home_page.dart         the landing page: hero, what it does, the scale,
+                             what gets written, Getting started, the footer
+      map_screen.dart        the editing screen — map plus rail or bottom bar
+    steward_app.dart         the two screens, the two routes, and the theme
 assets/
   slab/
     logo.png                 SLAB's mountain mark — brand lockup, web icons
+    trail_hero.jpg           the landing page's hero photograph
     difficulty/              the seven signage chips, one SVG per rating
 ```
 
-Both are copies of what SLAB ships in `docs/slab_assets`, which is the sister
-app's handoff folder — re-copy from there when the artwork changes, rather
-than redrawing it here.
+All three are copies of what SLAB ships in `docs/slab_assets`, which is the
+sister app's handoff folder — re-copy from there when the artwork changes,
+rather than redrawing it here. `trail_hero.jpg` is that folder's
+`placeholder_trail_hero.jpg` and is named a placeholder there for a reason: it
+is 1015×614, which is soft on a wide display, and it wants replacing with SLAB
+photography before launch. The scrims over it in
+[home_page.dart](lib/src/ui/home_page.dart) are tuned to a dark image with warm
+light in it; a brighter replacement will want them raised again.
 
 ## Next
 

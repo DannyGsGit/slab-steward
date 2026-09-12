@@ -27,8 +27,14 @@
 The question this whole document exists to answer:
 
 ```
-app_opened → trail_selected → edit_staged → auth_completed → submit_opened → submit_succeeded
+app_opened → map_opened → trail_selected → edit_staged → auth_completed → submit_opened → submit_succeeded
 ```
+
+`map_opened` joined the funnel with the landing page. `app_opened` now lands on the
+home page rather than on the editor, so without a step between them the drop from
+`app_opened` to `trail_selected` mixes two unrelated failures — "read the home page
+and left" and "opened the map and found nothing worth editing". The first is a copy
+problem, the second is a map problem, and they are fixed in different files.
 
 Each step is one event. Everything else in the schema exists to explain a drop between
 two of them. Building this funnel, and the three views that diagnose it, is
@@ -42,6 +48,7 @@ it code.
 | Event | Call site | Properties |
 |---|---|---|
 | `app_opened` | `main.dart`, *after* the OAuth-popup early return | — |
+| `map_opened` | the map route's `initState`, `steward_app.dart` | — |
 | `trail_selected` | `setSelected` / `selectFromTile`, `steward_state.dart` | `bulk` (bool), `count` |
 | `edit_staged` | `_applyAcross`, `steward_state.dart` | `attribute`, `trail_count` |
 | `auth_started` | `signIn`, `osm_auth.dart` | — |
@@ -70,6 +77,12 @@ exactly the people who got furthest down it. And `edit_staged` fires from
 `_applyAcross`, the single point every staging path funnels through, so one rider
 *act* is one event carrying how many trails it covered — instrumenting `stageEdit`
 would have emitted a hundred events for one bulk apply.
+
+`map_opened` fires from the route rather than from the landing page's button so a
+deep link straight to `#/map` — a bookmark, or a link someone shared — counts as
+well. It is in `initState` rather than in the route builder because a `WidgetBuilder`
+can be invoked more than once for a single route, and double-counting the step the
+whole landing page exists to move would flatter it.
 
 **Super-property `writes_to_osm`**, from `osmEnvironment.writesToOsm`. It records what
 a build would actually do with a submission, which is a thing worth having on every

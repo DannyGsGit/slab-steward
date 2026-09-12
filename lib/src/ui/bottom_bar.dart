@@ -229,29 +229,95 @@ class MapSettingsButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = state.activeSection == SidebarSection.map;
+    return _MapCornerButton(
+      alignment: Alignment.topRight,
+      tooltip: SidebarSection.map.tooltip,
+      active: isActive,
+      onTap: () => state.toggleSection(SidebarSection.map),
+      child: Icon(
+        SidebarSection.map.icon,
+        size: 19,
+        color: isActive ? SlabColors.onGold : SlabColors.cream,
+      ),
+    );
+  }
+}
+
+/// The way home on a phone: the brand mark in the map's top-left corner.
+///
+/// The wide layout puts this at the head of the rail; a bottom bar has no room
+/// for something that isn't a pane, so it moves onto the map for the same
+/// reason [MapSettingsButton] did — and to the opposite corner, so the two
+/// floating controls never crowd each other.
+class MapHomeButton extends StatelessWidget {
+  const MapHomeButton({super.key, required this.onHome});
+
+  final VoidCallback onHome;
+
+  @override
+  Widget build(BuildContext context) => _MapCornerButton(
+    alignment: Alignment.topLeft,
+    tooltip: 'SLAB Steward — back to the home page',
+    onTap: onHome,
+    // No padding around the mark: the artwork is a filled square with its own
+    // margin, and the button clips it to the same radius the rail does.
+    padding: EdgeInsets.zero,
+    child: Image.asset(
+      'assets/slab/logo.png',
+      width: 38,
+      height: 38,
+      filterQuality: FilterQuality.medium,
+    ),
+  );
+}
+
+/// The chrome both floating map buttons wear: a 38-square, ink or gold,
+/// shadowed enough to stay legible over snow, sand or a lake.
+///
+/// Shared so the two corners can't drift into two different buttons.
+class _MapCornerButton extends StatelessWidget {
+  const _MapCornerButton({
+    required this.alignment,
+    required this.tooltip,
+    required this.onTap,
+    required this.child,
+    this.active = false,
+    this.padding = const EdgeInsets.all(0),
+  });
+
+  final Alignment alignment;
+  final String tooltip;
+  final VoidCallback onTap;
+  final Widget child;
+  final bool active;
+  final EdgeInsets padding;
+
+  static const _size = 38.0;
+
+  @override
+  Widget build(BuildContext context) {
     return SafeArea(
       child: Align(
-        alignment: Alignment.topRight,
+        alignment: alignment,
         child: Padding(
-          padding: const EdgeInsets.only(top: 12, right: 12),
+          padding: const EdgeInsets.all(12),
           // The map underneath would otherwise swallow the tap on web.
           child: PointerInterceptor(
             child: Tooltip(
-              message: SidebarSection.map.tooltip,
+              message: tooltip,
               child: Material(
-                color: isActive ? SlabColors.gold : SlabColors.ink900,
+                color: active ? SlabColors.gold : SlabColors.ink900,
                 borderRadius: BorderRadius.circular(SlabRadii.control),
                 clipBehavior: Clip.antiAlias,
                 elevation: 4,
                 shadowColor: const Color(0xB3000000),
                 child: InkWell(
-                  onTap: () => state.toggleSection(SidebarSection.map),
-                  child: SizedBox.square(
-                    dimension: 38,
-                    child: Icon(
-                      SidebarSection.map.icon,
-                      size: 19,
-                      color: isActive ? SlabColors.onGold : SlabColors.cream,
+                  onTap: onTap,
+                  child: Padding(
+                    padding: padding,
+                    child: SizedBox.square(
+                      dimension: _size,
+                      child: Center(child: child),
                     ),
                   ),
                 ),

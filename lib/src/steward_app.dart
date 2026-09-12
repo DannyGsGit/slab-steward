@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 
-import 'map/steward_map_view.dart';
+import 'analytics/steward_events.dart';
 import 'state/steward_state.dart';
-import 'ui/bottom_bar.dart';
-import 'ui/sidebar.dart';
+import 'ui/home_page.dart';
+import 'ui/map_screen.dart';
 import 'ui/slab_theme.dart';
 
+/// The two screens, and the way between them.
+///
+/// Steward opened straight onto the map until the landing page arrived. It no
+/// longer does, and the reason is not marketing: this tool writes to a public
+/// database under the rider's own name, and the account requirement, the
+/// verifiability standard and what a changeset actually is all have to be
+/// answerable *before* the first edit. A pane inside the editor is too late to
+/// ask them. See [StewardHomePage].
 class StewardApp extends StatefulWidget {
   const StewardApp({super.key});
 
@@ -13,7 +21,27 @@ class StewardApp extends StatefulWidget {
   State<StewardApp> createState() => _StewardAppState();
 }
 
+/// The two named routes.
+///
+/// Named rather than a flag in this widget's state so the browser's own
+/// history works: Flutter web's default hash strategy puts the map at
+/// `#/map`, and Back goes home. A rider who lands on the map and presses Back
+/// expecting the home page is right, and a flag would have taken them out of
+/// the app instead.
+///
+/// This does not disturb OAuth. The redirect URI is always `Uri.base.origin`
+/// with no path (see `osm_auth.dart`), and the callback is detected from the
+/// query string rather than the fragment (see `oauth_callback_web.dart`), so
+/// neither one can see a route.
+abstract final class StewardRoutes {
+  static const home = '/';
+  static const map = '/map';
+}
+
 class _StewardAppState extends State<StewardApp> {
+  /// Owned here rather than by either screen, which is what makes the brand
+  /// mark safe to press: staged edits, the selection and the OSM sign-in all
+  /// outlive a trip to the landing page and back.
   final _state = StewardState();
 
   @override
@@ -22,113 +50,70 @@ class _StewardAppState extends State<StewardApp> {
     super.dispose();
   }
 
+  /// Back to the landing page.
+  ///
+  /// A pop where there is something to pop, so the history stays one entry
+  /// deep however many times the rider goes back and forth. The replacement is
+  /// for the case the pop can't cover: someone who opened `#/map` directly, or
+  /// arrived on a link, has no home page underneath to return to.
+  void _goHome(BuildContext context) {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      navigator.pushReplacementNamed(StewardRoutes.home);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'SLAB Steward',
       debugShowCheckedModeBanner: false,
-      // SLAB's design system — dark forest and gold, from
+      // SLAB's design system — deep navy and gold, from
       // docs/requirements/SLAB Design System - Mockups v2.html. The chrome is
       // dark on purpose: the map is the bright thing on screen and the rail
       // and pane are what surrounds it, exactly as the sister app treats its
-      // own map screen.
+      // own map screen. The landing page is the same palette at page scale.
       theme: slabTheme(),
-      home: _HomePage(state: _state),
+      initialRoute: StewardRoutes.home,
+      routes: {
+        StewardRoutes.home: (context) => StewardHomePage(
+          state: _state,
+          onOpenMap: () => Navigator.of(context).pushNamed(StewardRoutes.map),
+        ),
+        StewardRoutes.map: (context) =>
+            _MapRoute(state: _state, onHome: () => _goHome(context)),
+      },
     );
   }
 }
 
-class _HomePage extends StatelessWidget {
-  const _HomePage({required this.state});
+/// [StewardMapScreen] plus the one event that has to fire when it opens.
+///
+/// A wrapper rather than a call inside the route builder: a `WidgetBuilder`
+/// may be invoked more than once for a single route, and `map_opened` counted
+/// twice would quietly overstate the step the whole landing page exists to
+/// move. `initState` runs once per route, which is exactly the question the
+/// event is asking.
+class _MapRoute extends StatefulWidget {
+  const _MapRoute({required this.state, required this.onHome});
 
   final StewardState state;
-
-  /// How much of a narrow window the pane may claim before it starts eating
-  /// the map. Half: below that the map stops being a map.
-  static const _maxPaneFraction = 0.5;
-
-  /// Under this, the rail and pane side by side leave too little width to be
-  /// worth either, and the layout turns ninety degrees — see
-  /// [StewardBottomBar].
-  ///
-  /// A rail is 64 and the narrowest pane is 360, so a window this wide is
-  /// already giving the map less than half of itself; a phone held upright is
-  /// nowhere near it. Measured on the window rather than the platform because
-  /// what is too narrow is the window: a desktop browser dragged down to a
-  /// column has the same problem a phone does, and answers to the same fix.
-  static const _bottomBarBelow = 720.0;
+  final VoidCallback onHome;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: LayoutBuilder(
-        builder: (context, constraints) =>
-            constraints.maxWidth < _bottomBarBelow
-            ? _mobileLayout(constraints)
-            : _wideLayout(constraints),
-      ),
-    );
+  State<_MapRoute> createState() => _MapRouteState();
+}
+
+class _MapRouteState extends State<_MapRoute> {
+  @override
+  void initState() {
+    super.initState();
+    trackMapOpened();
   }
 
-  /// The chrome listens to the app's state; the map is left out of every one
-  /// of these builders on purpose. It reads the same state through its own
-  /// listener and repaints the parts that changed — rebuilding it from up here
-  /// as well would re-encode a stylesheet every time a checkbox moved.
-  Widget _listening(WidgetBuilder builder) => ListenableBuilder(
-    listenable: state,
-    builder: (context, _) => builder(context),
-  );
-
-  /// A row, not a stack. Every panel Steward has used to float over the map,
-  /// which meant the map was always partly hidden and — on web, where the map
-  /// is a platform view the browser feeds directly — every click and scroll
-  /// over a panel had to be fended off before it reached the map. Beside it,
-  /// neither problem exists. See [StewardSidebar].
-  Widget _wideLayout(BoxConstraints constraints) => Row(
-    children: [
-      _listening(
-        (context) => StewardSidebar(
-          state: state,
-          maxPaneWidth: constraints.maxWidth * _maxPaneFraction,
-        ),
-      ),
-      // The map keeps whatever is left, and resizes as the pane opens and
-      // closes rather than being covered by it.
-      Expanded(child: StewardMapView(state: state)),
-    ],
-  );
-
-  /// The same layout stood on end: map, then the open pane, then the bar. The
-  /// pane is a band between the two rather than a sheet over the map, for the
-  /// same reason the wide layout puts it beside one.
-  ///
-  /// Only the map settings button floats, because it is the one control that
-  /// is about the map itself.
-  Widget _mobileLayout(BoxConstraints constraints) => Column(
-    children: [
-      Expanded(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            StewardMapView(state: state),
-            _listening((context) => MapSettingsButton(state: state)),
-          ],
-        ),
-      ),
-      _listening(
-        (context) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (state.activeSection case final section?)
-              StewardMobilePane(
-                state: state,
-                section: section,
-                height: mobilePaneHeight(constraints.maxHeight),
-              ),
-            StewardBottomBar(state: state),
-          ],
-        ),
-      ),
-    ],
-  );
+  @override
+  Widget build(BuildContext context) =>
+      StewardMapScreen(state: widget.state, onHome: widget.onHome);
 }

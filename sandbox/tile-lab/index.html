@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tile Lab — SLAB Steward</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 fill=%27%2316302a%27/%3E%3Cpath d=%27M4 25 L13 9 L18 18 L21 13 L28 25 Z%27 fill=%27%23fff%27/%3E%3C/svg%3E">
+<link href="vendor/maplibre-gl.css" rel="stylesheet">
+<style>
+  :root {
+    --ink: #16191c;
+    --panel: rgba(252, 250, 245, 0.93);
+    --line: rgba(22, 25, 28, 0.12);
+    --accent: #ef4b18;
+    --map-bg: #EEF3F8;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.45 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--map-bg);
+    overflow: hidden;
+  }
+
+  #map { position: absolute; inset: 0; }
+
+  /* The paper grain. Multiplied over the canvas and pointer-transparent, so it
+     changes how the map looks without changing how it behaves. */
+  #grain {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+    background-repeat: repeat;
+    z-index: 2;
+  }
+  /* A hint of lens falloff. Printed maps are darker at the edges because of
+     how they were photographed; screens are not, and it reads as flat. */
+  #vignette {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: 3;
+    background: radial-gradient(ellipse at 50% 45%,
+      rgba(0,0,0,0) 55%, rgba(30,35,45,0.14) 100%);
+  }
+
+  /* --- Panel --- */
+  #panel {
+    position: absolute; top: 14px; left: 14px; z-index: 10;
+    width: 286px; max-height: calc(100% - 28px);
+    overflow-y: auto;
+    background: var(--panel);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 10px 34px rgba(20, 26, 34, 0.16);
+  }
+  body.collapsed #panel > *:not(header) { display: none; }
+  body.collapsed #panel { width: auto; }
+
+  #panel header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  body.collapsed #panel header { border-bottom: none; }
+  #panel header h1 {
+    font-size: 13px; margin: 0; letter-spacing: .06em; text-transform: uppercase;
+    flex: 1; white-space: nowrap;
+  }
+  #panel header .dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    flex: none;
+  }
+  #panel-toggle {
+    border: none; background: none; cursor: pointer; font-size: 15px;
+    color: var(--ink); opacity: .5; padding: 0 2px; line-height: 1;
+  }
+  #panel-toggle:hover { opacity: 1; }
+
+  section { padding: 12px; border-bottom: 1px solid var(--line); }
+  section:last-child { border-bottom: none; }
+  h2 {
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    margin: 0 0 9px; opacity: .55; font-weight: 600;
+  }
+
+  .style-btn {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: rgba(255,255,255,.55);
+    border: 1px solid var(--line); border-radius: 9px;
+    padding: 9px 10px; margin-bottom: 7px;
+    font: inherit; color: inherit;
+    transition: border-color .12s, background .12s;
+  }
+  .style-btn:last-child { margin-bottom: 0; }
+  .style-btn:hover { background: #fff; }
+  .style-btn.on { border-color: var(--accent); background: #fff; box-shadow: inset 3px 0 0 var(--accent); }
+  .style-btn strong { display: block; font-size: 13px; margin-bottom: 2px; }
+  .style-btn span { display: block; font-size: 11px; line-height: 1.4; opacity: .62; }
+
+  .row { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
+  .row:last-child { margin-bottom: 0; }
+  .row label { flex: 1; }
+  .row output { font-variant-numeric: tabular-nums; opacity: .6; font-size: 11px; min-width: 34px; text-align: right; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  input[type=checkbox] { accent-color: var(--accent); }
+  select, button.action {
+    width: 100%; font: inherit; color: inherit;
+    padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px;
+    background: rgba(255,255,255,.7); cursor: pointer;
+  }
+  button.action:hover { background: #fff; border-color: var(--accent); }
+
+  .note { font-size: 11px; line-height: 1.5; opacity: .6; margin: 9px 0 0; }
+  .note code { font-size: 10.5px; background: rgba(22,25,28,.07); padding: 1px 4px; border-radius: 3px; }
+
+  /* --- Legend --- */
+  .legend { display: grid; grid-template-columns: auto 1fr; gap: 5px 9px; align-items: center; font-size: 11.5px; }
+  .chip { width: 15px; height: 15px; display: grid; place-items: center; }
+  .chip i { display: block; background: currentColor; }
+  .chip .circle { width: 10px; height: 10px; border-radius: 50%; }
+  .chip .square { width: 9px; height: 9px; }
+  .chip .diamond { width: 9px; height: 9px; transform: rotate(45deg); }
+
+  /* --- Inspector --- */
+  #inspect {
+    position: absolute; right: 14px; top: 14px; z-index: 10;
+    width: 250px; max-height: 46%; overflow: auto; display: none;
+    background: var(--panel); backdrop-filter: blur(14px);
+    border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 10px 34px rgba(20,26,34,.16);
+    font-size: 11px;
+  }
+  #inspect.on { display: block; }
+  .inspect-head {
+    display: flex; align-items: center; padding: 9px 11px;
+    border-bottom: 1px solid var(--line);
+    font-weight: 600; letter-spacing: .04em; text-transform: uppercase; font-size: 10px;
+  }
+  .inspect-head button { margin-left: auto; border: none; background: none; cursor: pointer; font-size: 15px; opacity: .5; }
+  #inspect table { width: 100%; border-collapse: collapse; }
+  #inspect td { padding: 3px 11px; vertical-align: top; }
+  #inspect td:first-child { opacity: .55; white-space: nowrap; }
+  #inspect tr:nth-child(even) { background: rgba(22,25,28,.035); }
+
+  /* --- Flash --- */
+  #flash {
+    position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(8px);
+    z-index: 20; padding: 8px 15px; border-radius: 999px;
+    background: rgba(22,25,28,.9); color: #fff; font-size: 12px;
+    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+  }
+  #flash.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 640px) {
+    #panel { width: calc(100% - 28px); max-height: 52%; }
+    #inspect { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="grain"></div>
+<div id="vignette"></div>
+
+<div id="panel">
+  <header>
+    <span class="dot"></span>
+    <h1>Tile Lab</h1>
+    <button id="panel-toggle" title="Collapse">&#9662;</button>
+  </header>
+
+  <section>
+    <h2>Basemap style</h2>
+    <div id="styles"></div>
+  </section>
+
+  <section>
+    <h2>Terrain</h2>
+    <div class="row">
+      <label for="terrain">3D terrain</label>
+      <input type="checkbox" id="terrain" checked>
+    </div>
+    <div class="row">
+      <label for="exag">Exaggeration</label>
+      <output id="exag-out">1.3&times;</output>
+    </div>
+    <input type="range" id="exag" min="0" max="3" step="0.1" value="1.3">
+    <div class="row" style="margin-top:10px">
+      <label for="shade">Hillshade strength</label>
+      <output id="shade-out">0.55</output>
+    </div>
+    <input type="range" id="shade" min="0" max="1.5" step="0.05" value="0.55">
+    <div class="row" style="margin-top:10px">
+      <label for="contours">Contour lines</label>
+      <input type="checkbox" id="contours" checked>
+    </div>
+  </section>
+
+  <section>
+    <h2>Trail overlay</h2>
+    <div class="row">
+      <label for="overlay">Opacity</label>
+      <output id="overlay-out">100%</output>
+    </div>
+    <input type="range" id="overlay" min="0" max="1" step="0.05" value="1">
+    <p class="note">Fade Steward's trails to judge the basemap on its own. At
+    0% you're looking at nothing but tiles.</p>
+  </section>
+
+  <section>
+    <h2>Paper</h2>
+    <div class="row">
+      <label for="grain">Grain</label>
+      <output id="grain-out">18%</output>
+    </div>
+    <input type="range" id="grain" min="0" max="1" step="0.05" value="0.18">
+    <p class="note">Turbulence multiplied over the canvas. Not part of the
+    style JSON — the one effect here that has to be re-created in Flutter.</p>
+  </section>
+
+  <section>
+    <h2>Difficulty</h2>
+    <div class="legend">
+      <span class="chip" style="color:#2f6b4d"><i class="circle"></i></span><span>IMBA 0&ndash;1 &middot; easy</span>
+      <span class="chip" style="color:#3b5fc6"><i class="square"></i></span><span>IMBA 2 &middot; medium</span>
+      <span class="chip" style="color:#16191c"><i class="diamond"></i></span><span>IMBA 3 &middot; hard</span>
+      <span class="chip" style="color:#ef4b18"><i class="diamond"></i></span><span>IMBA 4 &middot; very hard</span>
+      <span class="chip" style="color:#c100cc"><i class="circle"></i></span><span>Un-rated</span>
+    </div>
+    <p class="note">Trail colours are the app's, from
+    <code>otm_conventions.dart</code> &mdash; the basemap is what's being
+    judged, so the overlay stays honest. Ski runs have no difficulty:
+    <code>piste:difficulty</code> isn't in the tileset. See the README.</p>
+  </section>
+
+  <section>
+    <h2>Jump to</h2>
+    <select id="place"></select>
+    <button class="action action-export" id="export" style="margin-top:8px">Copy style JSON</button>
+    <p class="note">Click any line on the map to see the tags its tile actually
+    carries.</p>
+  </section>
+</div>
+
+<div id="inspect"></div>
+<div id="flash"></div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="vendor/maplibre-contour.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

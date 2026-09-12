@@ -174,7 +174,7 @@ class _AccountPanelState extends State<AccountPanel> {
               ),
             ],
             const SizedBox(height: 24),
-            const _PrivacyNote(),
+            const PrivacyNote(),
           ],
         );
       },
@@ -190,22 +190,35 @@ class _AccountPanelState extends State<AccountPanel> {
 /// straight answer without leaving the app. Short on purpose: the honest
 /// version is genuinely this short — no autocapture, no session recording,
 /// nothing about the map itself. See docs/specs/analytics.md §3.
-class _PrivacyNote extends StatelessWidget {
-  const _PrivacyNote();
+///
+/// Public, and used twice: here, and behind the landing page's Privacy link —
+/// see `home_page.dart`. Deliberately one widget rather than two copies of the
+/// text. A privacy statement that exists in two places is a privacy statement
+/// that will eventually say two different things, and the one on the marketing
+/// page is the one that would go stale.
+class PrivacyNote extends StatelessWidget {
+  const PrivacyNote({super.key, this.showHeading = true});
+
+  /// The dialog on the landing page is already titled "Privacy", so it asks
+  /// for the words without the heading and the rule above them.
+  final bool showHeading;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        const Divider(color: SlabColors.line, height: 1),
-        const SizedBox(height: 14),
-        Text(
-          'Privacy',
-          style: theme.textTheme.labelLarge?.copyWith(color: SlabColors.sage),
-        ),
-        const SizedBox(height: 6),
+        if (showHeading) ...[
+          const Divider(color: SlabColors.line, height: 1),
+          const SizedBox(height: 14),
+          Text(
+            'Privacy',
+            style: theme.textTheme.labelLarge?.copyWith(color: SlabColors.sage),
+          ),
+          const SizedBox(height: 6),
+        ],
         Text(
           'Steward counts how the tool gets used — visits, trails selected, '
           'edits staged and submitted — so we can see where it gets in your '

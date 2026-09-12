@@ -7,8 +7,8 @@
 ///
 /// The funnel these compose is docs/specs/analytics.md §1:
 ///
-///     app_opened → trail_selected → edit_staged → auth_completed
-///                → submit_opened → submit_succeeded
+///     app_opened → map_opened → trail_selected → edit_staged
+///                → auth_completed → submit_opened → submit_succeeded
 ///
 /// Everything else exists to explain a drop between two of those.
 library;
@@ -17,6 +17,18 @@ import '../model/staged_edit.dart';
 import 'analytics.dart';
 
 void trackAppOpened() => captureEvent('app_opened');
+
+/// The landing page did its one job.
+///
+/// Added with the landing page, and it is a real funnel step rather than a
+/// vanity count: `app_opened` now lands on the home page, so without this the
+/// drop to `trail_selected` mixes "read the page and left" with "opened the
+/// map and found nothing worth editing". Those are different problems with
+/// different fixes — one is the copy on the home page, the other is the map.
+///
+/// Fires from the map route's `initState` (`steward_app.dart`) rather than
+/// from the button, so a deep link straight to `#/map` counts too.
+void trackMapOpened() => captureEvent('map_opened');
 
 /// [count] is how many trails the gesture named — one for a click, however
 /// many a box or a "select all" caught.

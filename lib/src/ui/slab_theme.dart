@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 /// The SLAB design system, as Steward wears it.
 ///
 /// Source: `docs/requirements/SLAB Design System - Mockups v2.html` — the sister app's
-/// handoff doc. Its palette is the moody dark-forest / gold identity, and its
-/// rule for a map screen is the one Steward needs: **the map is fixed, the
-/// chrome around it is ours**. Basemap, trail line colours and the
+/// handoff doc, with the ink ramp re-tinted to the deep navy the app ships
+/// today — same steps, same roles, blue where the doc was green, so Steward's
+/// rail and panes read as the same product as the trail screen. Its rule for a
+/// map screen is the one Steward needs: **the map is fixed, the chrome around
+/// it is ours**. Basemap, trail line colours and the
 /// OpenTrailMap vocabulary in `otm_conventions.dart` are untouched by
 /// everything here; panels, cards, buttons, pickers and badges are not.
 ///
@@ -14,23 +16,25 @@ import 'package:flutter/material.dart';
 /// marker callbacks, and the glyphs are painted from asset SVGs that carry
 /// their own colours.
 
-/// The palette, straight off the design doc's `:root` block.
+/// The palette: the design doc's `:root` block, with the five ink steps and the
+/// two secondary text tones swapped from forest to navy. Gold, cream, rust and
+/// the difficulty badges are the identity and are untouched.
 abstract final class SlabColors {
   /// Page ground — behind everything, including the map while it loads.
-  static const ink950 = Color(0xFF0B1512);
+  static const ink950 = Color(0xFF0B1420);
 
   /// Rail, tab bar, search chrome. In Steward: the recessed rows inside a
   /// panel, and the chips on the map.
-  static const ink900 = Color(0xFF12211C);
+  static const ink900 = Color(0xFF101E2E);
 
   /// Panel surface — every floating card over the map.
-  static const ink800 = Color(0xFF1B2C25);
+  static const ink800 = Color(0xFF18293B);
 
   /// Cards, rows, inputs sitting *on* a panel.
-  static const ink700 = Color(0xFF24382F);
+  static const ink700 = Color(0xFF21344A);
 
   /// One step lighter again, for a hovered or pressed row.
-  static const ink600 = Color(0xFF32493D);
+  static const ink600 = Color(0xFF2E445E);
 
   /// The hairline that separates anything from anything —
   /// `rgba(243,239,230,0.08)`.
@@ -47,16 +51,16 @@ abstract final class SlabColors {
   static const goldDim = Color(0xFF8C7220);
 
   /// Text and icons on top of [gold].
-  static const onGold = Color(0xFF17251E);
+  static const onGold = Color(0xFF15212E);
 
   /// Primary text on dark.
   static const cream = Color(0xFFF3EFE6);
 
-  /// Secondary text — echoes the map's hillshade.
-  static const sage = Color(0xFF93A69A);
+  /// Secondary text — a slate blue, the ramp's own grey rather than faded cream.
+  static const sage = Color(0xFF92A4B8);
 
   /// Tertiary text: units, timestamps, the quiet half of a row.
-  static const sageDim = Color(0xFF5C6E62);
+  static const sageDim = Color(0xFF5B6E82);
 
   /// The one "live / destructive" accent. SLAB spends it on recording;
   /// Steward spends it on errors and on discarding work.
@@ -66,8 +70,8 @@ abstract final class SlabColors {
   static const rustSoft = Color(0x2EB5453A);
 
   /// A panel floating directly on the map, where the basemap has to stay
-  /// faintly readable through it — `rgba(18,33,28,0.92)`.
-  static const overlay = Color(0xEB12211C);
+  /// faintly readable through it — [ink900] at 92%.
+  static const overlay = Color(0xEB101E2E);
 
   /// The design doc's difficulty badge colours. Steward draws difficulty as
   /// the signage glyph (see `Difficulty.assetPath`), so these are only for
