@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../model/difficulty.dart';
 import '../osm/osm_environment.dart';
 import '../state/steward_state.dart';
-import 'account_panel.dart' show PrivacyNote;
+import 'account_panel.dart' show AccountAvatar, PrivacyNote;
 import 'slab_chrome.dart';
 import 'slab_theme.dart';
 
@@ -115,8 +114,6 @@ class _StewardHomePageState extends State<StewardHomePage> {
                     onGettingStarted: _toGettingStarted,
                   ),
                   const _WhatItDoes(),
-                  const _SignageStrip(),
-                  const _WhatGetsWritten(),
                   _GettingStarted(
                     key: _gettingStartedKey,
                     onOpenMap: widget.onOpenMap,
@@ -380,7 +377,7 @@ class _Hero extends StatelessWidget {
                         ),
                         const SizedBox(height: 18),
                         Text(
-                          'Rate the trails\nyou already know.',
+                          'Trail rating\nfor everyone.',
                           style: TextStyle(
                             fontSize: wide ? 56 : 38,
                             height: 1.04,
@@ -391,11 +388,12 @@ class _Hero extends StatelessWidget {
                         ),
                         const SizedBox(height: 20),
                         Text(
-                          'Steward is a guided editor for the trail data behind '
-                          'the maps you ride with. Find a trail, say how hard it '
-                          'is and who may ride it, and send the change to '
-                          '$osmLabel under your own account — no tag keys, no '
-                          'editor to learn.',
+                          'The SLAB project is built on a simple principle: Trail data should not be paywalled. '
+                          'Steward is SLAB\'s guided editor for OSM trail data, making sure that every community contribution '
+                          'is free & open forever. '
+                          'Find a trail, tag it, and send the change to '
+                          '$osmLabel under your own account, no need to learn'
+                          'the ins & outs of tags.',
                           style: TextStyle(
                             fontSize: wide ? 16.5 : 15,
                             height: 1.6,
@@ -418,13 +416,13 @@ class _Hero extends StatelessWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Free, and there is no Steward account to make. '
-                          'Your edits go out in your name.',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: SlabColors.sage),
-                        ),
+                        // const SizedBox(height: 20),
+                        // Text(
+                        //   'Free, and there is no Steward account to make. '
+                        //   'Your edits go out in your name.',
+                        //   style: Theme.of(context).textTheme.bodySmall
+                        //       ?.copyWith(color: SlabColors.sage),
+                        // ),
                       ],
                     ),
                   ),
@@ -614,37 +612,27 @@ class _WhatItDoes extends StatelessWidget {
       title: 'Find the trail',
       body:
           "The map draws OpenStreetMap's trails to OpenTrailMap's conventions "
-          'and colours them by what they are missing. Informal singletrack '
-          'only, by default — sidewalks and pavement outnumber the trails many '
-          'times over — and a list of everything in view, with each gap named.',
+          'and highlights them according to missing metadata.',
     ),
     (
       icon: Icons.signpost_outlined,
-      title: 'Answer in signage',
+      title: 'Tag, simply',
       body:
           'Difficulty is the circle, square and diamond scale off the '
-          'trailhead sign. E-bike access is allowed or not, and then up to '
-          'which class, in the vocabulary of wherever the trail is — Class 1 '
-          'in Oregon, pedelec in Italy, snorfiets in the Netherlands.',
+          'trailhead sign. E-bike access is set according to regional terms.',
     ),
     (
       icon: Icons.select_all,
       title: 'Rate a whole network',
       body:
-          'Ctrl-click, or drag a box across the map, and one rating applies to '
-          'every trail it caught. A loop signed as one difficulty is one '
-          'answer, not fourteen — and Steward tells you afterwards which '
-          'trails took it and which already had something it would not '
-          'overwrite.',
+          'Drag a box around a group of similar trails to edit in bulk.',
     ),
     (
       icon: Icons.cloud_upload_outlined,
-      title: 'Submit as yourself',
+      title: 'Submit to OSM',
       body:
-          'Nothing leaves your browser until you say so. Then it goes as one '
-          'changeset under your own $osmLabel account, after a screen that '
-          'shows every before and after and a checklist that re-reads each '
-          'trail for conflicts first.',
+          'When you\'re ready, your edits pass a validation check '
+          'and go to $osmLabel one changeset.',
     ),
   ];
 
@@ -654,10 +642,9 @@ class _WhatItDoes extends StatelessWidget {
       label: 'WHAT STEWARD DOES',
       title: 'The trail data is only as good\nas the riders who fix it.',
       blurb:
-          'Every map that shows a trail is reading the same public database, '
-          'and most of its trails carry no difficulty at all. You already know '
-          'which ones are blue and which ones will hurt. Steward is the '
-          'shortest path from knowing that to it being on the map.',
+          'Editing $osmLabel metadata correctly and consistently has a learning curve. '
+          'Steward hides the complexity to make it easy and efficient for anyone to '
+          'enrich this open source database of trail data. ',
       topBorder: false,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -709,179 +696,34 @@ class _WhatItDoes extends StatelessWidget {
   }
 }
 
-/// The difficulty scale, drawn from the same artwork the editor uses.
-///
-/// Worth a band of its own: it is the single most recognisable thing SLAB
-/// owns, and showing all seven chips answers "what will I actually be asked"
-/// faster than any sentence about it could.
-class _SignageStrip extends StatelessWidget {
-  const _SignageStrip();
+/// A caption beside a glyph, sized to sit next to it rather than under it.
+const _captionStyle = TextStyle(fontSize: 13, color: SlabColors.sage);
+
+/// A static echo of the sidebar's Staged rail button, badge and all — so this
+/// page can show what "staged" looks like rather than only describe it.
+class _StagedGlyph extends StatelessWidget {
+  const _StagedGlyph({this.count = 0});
+
+  final int count;
 
   @override
   Widget build(BuildContext context) {
-    return _Section(
-      label: 'THE SCALE',
-      title: 'One question, asked in the\nlanguage of the trailhead.',
-      blurb:
-          'Steward asks for the IMBA rating — the one already painted on the '
-          'sign — and writes it as OpenStreetMap\'s mtb:scale:imba. It never '
-          'asks you to estimate a percent grade or an obstacle height in '
-          'centimetres.',
-      background: SlabColors.ink900,
-      child: Wrap(
-        spacing: 14,
-        runSpacing: 14,
-        children: [
-          for (final difficulty in Difficulty.values)
-            _SignageChip(difficulty: difficulty),
-        ],
+    const icon = Icon(
+      Icons.check_circle_outline,
+      size: 19,
+      color: SlabColors.sageDim,
+    );
+    return Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: SlabColors.line, width: 1.5),
       ),
+      child: count > 0 ? Badge.count(count: count, child: icon) : icon,
     );
   }
-}
-
-class _SignageChip extends StatelessWidget {
-  const _SignageChip({required this.difficulty});
-
-  final Difficulty difficulty;
-
-  @override
-  Widget build(BuildContext context) {
-    final scale = difficulty.imbaScale;
-    return SlabSurface(
-      padding: const EdgeInsets.fromLTRB(14, 12, 18, 12),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DifficultyIcon(difficulty, size: 26),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                difficulty.label,
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                // Un-rated is the absence of the tag, not a value of it, and
-                // Pro Line is the one rung OSM cannot hold. Both are worth
-                // saying here rather than quietly rounding off.
-                switch (difficulty) {
-                  Difficulty.unrated => 'no tag',
-                  Difficulty.proLine => 'mtb:scale:imba=4',
-                  _ => 'mtb:scale:imba=$scale',
-                },
-                style: const TextStyle(
-                  fontSize: 11,
-                  height: 1.3,
-                  fontFamily: 'monospace',
-                  color: SlabColors.sageDim,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The tag transparency band.
-///
-/// An audience that already edits OpenStreetMap will not use a tool that won't
-/// say what it writes, and an audience that doesn't should be able to find out
-/// before it writes anything in their name. Two rows, because two attributes
-/// is genuinely all Steward edits today — saying so plainly is worth more than
-/// implying a longer list.
-class _WhatGetsWritten extends StatelessWidget {
-  const _WhatGetsWritten();
-
-  static const _rows = [
-    (plain: 'Difficulty — Blue square (Medium)', tag: 'mtb:scale:imba=2'),
-    (plain: 'E-bikes allowed, up to Class 1', tag: 'electric_bicycle=yes'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= _wideAbove;
-    return _Section(
-      label: 'NO HIDDEN EDITS',
-      title: 'You never see a tag key.\nYou can always see the tags.',
-      blurb:
-          'Steward edits exactly two things: how hard a trail is, and whether '
-          'e-bikes may ride it. Surface and the rest are shown where they are '
-          'missing but are not editable yet. Before anything is submitted, the '
-          'review screen names every change twice — once in plain language, '
-          'once as the tag that is actually going out.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SlabSurface(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                for (final (index, row) in _rows.indexed) ...[
-                  if (index > 0) const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 16,
-                    ),
-                    child: wide
-                        ? Row(
-                            children: [
-                              Expanded(child: Text(row.plain)),
-                              const Icon(
-                                Icons.arrow_forward,
-                                size: 15,
-                                color: SlabColors.goldDim,
-                              ),
-                              const SizedBox(width: 18),
-                              SizedBox(width: 240, child: _Tag(row.tag)),
-                            ],
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(row.plain),
-                              const SizedBox(height: 6),
-                              _Tag(row.tag),
-                            ],
-                          ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          const _Note(
-            'Every changeset Steward opens carries #slabsteward, so this work '
-            'can be found and reviewed as a body — see the Organised Editing '
-            'Guidelines below.',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A literal OSM tag, set in mono so it never reads as prose.
-class _Tag extends StatelessWidget {
-  const _Tag(this.tag);
-
-  final String tag;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    tag,
-    style: const TextStyle(
-      fontSize: 12.5,
-      fontFamily: 'monospace',
-      color: SlabColors.gold,
-    ),
-  );
 }
 
 /// A quiet aside under a block — the thing worth knowing but not worth a
@@ -960,11 +802,18 @@ class _GettingStartedState extends State<_GettingStarted> {
       blurb:
           'Steward has no accounts of its own and never will. Every edit it '
           'sends is yours: your name on the changeset, in the public record, '
-          'permanently. That is the whole point — the map is edited by people '
-          'who can be asked about their edits.',
+          'permanently.',
       background: SlabColors.ink900,
       child: Column(
         children: [
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: _LinkButton(
+              label: 'Slab Steward on the OSM wiki',
+              url: _Links.wiki,
+            ),
+          ),
+          const SizedBox(height: 18),
           for (final (index, step) in steps.indexed) ...[
             if (index > 0) const SizedBox(height: 10),
             _ExpandableStep(
@@ -990,13 +839,6 @@ List<_Step> _steps(BuildContext context, VoidCallback onOpenMap) => [
     summary: 'Free, and the only account Steward uses.',
     body: [
       const _Para(
-        'OpenStreetMap is the public map database behind a great many of the '
-        'apps you already use. Steward is an editor for one small corner of '
-        'it, and it signs in as you rather than on your behalf — so an edit '
-        'you make here is indistinguishable from one you made in any other '
-        'OSM editor, and it is credited to you.',
-      ),
-      const _Para(
         'Making one takes about a minute and costs nothing. If you already '
         'edit OpenStreetMap, use the account you already have.',
       ),
@@ -1018,19 +860,25 @@ List<_Step> _steps(BuildContext context, VoidCallback onOpenMap) => [
   ),
   (
     title: 'Sign in to Steward',
-    summary: 'One popup on openstreetmap.org. Your password never comes here.',
+    summary: 'One popup on openstreetmap.org.',
     body: [
-      const _Para(
-        'Open the map, then Account — the person-shaped button at the foot of '
-        'the rail, or in the bar along the bottom on a phone — and press '
-        '"Sign in to $osmLabel".',
-      ),
-      const _Para(
-        'A popup opens on $osmShortLabel and asks whether Steward may act for '
-        'you. You type your password on their site, never in this app; what '
-        'Steward receives back is a token that can read who you are and write '
-        'changesets as you, and nothing else. Sign out at any time from the '
-        'same pane, which discards the token.',
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AccountAvatar(
+            isSignedIn: false,
+            isSigningIn: false,
+            displayName: null,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: _Para(
+              'Open the map, then look for this icon and '
+              'press "Sign in to $osmLabel".'
+              'A popup opens on $osmShortLabel and asks whether Steward may act for you.',
+            ),
+          ),
+        ],
       ),
       const _Note(
         'If pressing the button appears to do nothing, your browser blocked '
@@ -1043,24 +891,20 @@ List<_Step> _steps(BuildContext context, VoidCallback onOpenMap) => [
     summary: 'Pan, filter, and click. The map colours what is missing.',
     body: [
       const _Para(
-        'Only informal trails are drawn to start with. Footways, sidewalks, '
-        'tracks and paved paths outnumber the trails many times over, and a '
-        'map with all of them on is unreadable — the Map pane turns each kind '
-        'back on when you want it, along with which travel modes a trail has '
-        'to be open to.',
+        'The Map pane\'s filters decide what is drawn, in three groups:',
       ),
+      const _Bullet('Access — which travel modes a trail must allow.'),
+      const _Bullet('Include — which trail types are shown at all.'),
+      const _Bullet(
+        'Highlight — which gaps to flag; tick none for a plain map.',
+      ),
+      const SizedBox(height: 4),
       const _Para(
         'Colour tells you what a trail is missing rather than what it is: the '
         'default lenses are difficulty and e-bike access, so anything still '
         'unanswered stands out. "Trails in view" lists everything on screen '
         'with its gaps named, which is usually the faster way to work a '
         'network.',
-      ),
-      const _Para(
-        'Clicking a trail reads its geometry and tags live from the OSM API '
-        'rather than from the tiles — so what you are editing is what is on '
-        'the map right now, not a snapshot from whenever the tiles were last '
-        'built.',
       ),
     ],
   ),
@@ -1075,9 +919,7 @@ List<_Step> _steps(BuildContext context, VoidCallback onOpenMap) => [
       ),
       const _Para(
         'To do a network at once, ctrl-click (cmd-click on a Mac) several '
-        'trails, or hold the same key and drag a box across the map — every '
-        'trail it touches joins the set, and one answer applies to all of '
-        'them.',
+        'trails, or hold the same key and drag a box across the map.',
       ),
       const _Warn(
         'Rate what you have ridden or seen signed. OpenStreetMap\'s standard '
@@ -1086,45 +928,30 @@ List<_Step> _steps(BuildContext context, VoidCallback onOpenMap) => [
         'and a wrong rating is not.',
       ),
       const SizedBox(height: 12),
-      const _Para(
-        'Nothing has left your browser at this point. Every answer is staged, '
-        'and the Staged changes pane is where it waits.',
-      ),
     ],
   ),
   (
     title: 'Review, then submit',
     summary: 'A comment, a checklist, and one changeset.',
     body: [
-      const _Para(
-        'Staged changes lists every edit as a before and an after, and lets '
-        'you drop any of them. Above the list is the one thing Steward asks '
-        'you to write yourself: a changeset comment saying what you changed '
-        'and where.',
-      ),
-      const _Bullet(
-        'It has to be more than a few characters and more than one word. '
-        '"edit", "changes" and the like are rejected, because those are the '
-        'comments other mappers revert on sight.',
-      ),
-      const _Bullet(
-        'Steward appends #slabsteward if you have not already, so this work '
-        'can be found as a body.',
-      ),
-      const SizedBox(height: 12),
-      const _Para(
-        'Then a checklist runs before anything is written: the comment, the '
-        'hashtag, a fresh read of every trail, and a conflict check against '
-        'anything that changed on OpenStreetMap since you started. If someone '
-        'else has touched a field you are editing, Steward shows both answers '
-        'side by side and you choose — it will not overwrite silently.',
-      ),
-      const _Para(
-        'Passing the checklist opens one changeset, uploads every edit into '
-        'it, and closes it. The confirmation links straight to it on '
-        '$osmShortLabel.',
+      const Row(
+        children: [
+          _StagedGlyph(),
+          SizedBox(width: 10),
+          Text('nothing staged', style: _captionStyle),
+          SizedBox(width: 24),
+          _StagedGlyph(count: 3),
+          SizedBox(width: 10),
+          Text('3 staged', style: _captionStyle),
+        ],
       ),
       const SizedBox(height: 14),
+      const _Para(
+        'Open Staged changes, write a short comment, and submit. Steward '
+        'checks for conflicts first and never overwrites silently. If '
+        'someone else edited the same field, you choose which answer wins.',
+      ),
+      const SizedBox(height: 4),
       const _LinkButton(
         label: 'What makes a good changeset comment',
         url: _Links.goodComments,
@@ -1136,48 +963,12 @@ List<_Step> _steps(BuildContext context, VoidCallback onOpenMap) => [
     summary: 'Live immediately, and yours to correct.',
     body: [
       const _Para(
-        'The edit is on OpenStreetMap the moment the changeset closes, and it '
-        'is permanent — changesets cannot be un-submitted. Other maps pick it '
-        'up on their own schedules, anywhere from hours to weeks later, so do '
-        'not expect your favourite app to change tonight.',
-      ),
-      const _Para(
         'The Account pane keeps the receipts: every changeset Steward has sent '
-        'for you, each one a link to its page on OpenStreetMap, alongside a '
-        'count of what you have contributed.',
+        'for you, alongside a count of what you have contributed.',
       ),
       const _Para(
-        'Got one wrong? Fix it the same way you made it — select the trail '
-        'again, give the right answer, and submit. Nothing is hidden and '
-        'nothing is held against you; correcting your own edits is ordinary '
-        'mapping.',
-      ),
-    ],
-  ),
-  (
-    title: 'Why this tool tags its changesets',
-    summary: 'Steward is organised editing, and says so.',
-    body: [
-      const _Para(
-        'A tool that makes coordinated edits easy, used by many accounts at '
-        'once, is organised editing under OpenStreetMap\'s own definition '
-        'whether or not anyone calls it a campaign. Steward treats that as a '
-        'requirement rather than a formality: there is a wiki page describing '
-        'what it does and what it writes, and every changeset carries '
-        '#slabsteward so the community can review this work as a whole and '
-        'come to us if something is wrong.',
-      ),
-      const SizedBox(height: 14),
-      const Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          _LinkButton(label: 'Slab Steward on the OSM wiki', url: _Links.wiki),
-          _LinkButton(
-            label: 'Organised Editing Guidelines',
-            url: _Links.organisedEditing,
-          ),
-        ],
+        'Got one wrong? Fix it the same way you made it. Select the trail '
+        'again, give the right answer, and submit. ',
       ),
     ],
   ),
@@ -1474,7 +1265,7 @@ class _ClosingCta extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               const Text(
-                'That is a complete contribution. The map is built out of them.',
+                'Take Steward for a spin, complete the trail.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 15.5,
